@@ -4,7 +4,6 @@ import base64
 import copy
 import itertools
 import json
-import os
 import re
 import time
 from pathlib import Path
@@ -12,44 +11,70 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image
 
-from .comfy import ComfyClient
+from .client import comfy
+from .images import (
+    _resize_image_for_inline,
+    _OPENPOSE_LIMB_PAIRS,
+    _OPENPOSE_LIMB_COLORS,
+    _OPENPOSE_JOINT_COLORS,
+)
+from .logs import (
+    _is_log_noise,
+    _strip_history_warnings,
+    _extract_traceback_blocks,
+    _traceback_block_above,
+    _traceback_block_below,
+    _walk_traceback,
+)
+from .search import (
+    _SEARCH_STOPWORDS,
+    _basename_no_ext,
+    _score_query_match,
+    _fuzzy_match_list,
+    _split_query_tokens,
+    _score_model_path,
+)
+from .model_meta import (
+    _classify_model,
+    _trim_safetensors_metadata,
+    _model_summary,
+    _inspect_pytorch_state,
+    _upscaler_summary_from_state,
+    _read_safetensors_metadata,
+)
+from .core import (
+    _comfy_root,
+    _walk_json,
+    _detect_format,
+    _subgraph_def,
+    _resolve_node_path,
+    _outputs_to_files,
+)
+from .widgets import (
+    _ui_widget_order_aligned,
+    _flatten_inputs,
+    _socket_type,
+)
+from .tabs import _workflow_from_tab, _queue_and_enrich
+from .summarize import (
+    _extract_model_widget_refs,
+    _valid_values_for_input,
+    _describe_graph,
+    _summarize_workflow_body,
+    _describe_workflow_file,
+)
+from .snapshots import (
+    _read_workflow_for_apply,
+    _save_pre_apply_snapshot,
+)
 
 mcp = FastMCP("comfyui-mcp")
-comfy = ComfyClient()
 
 
 @mcp.tool()
 async def get_system_stats() -> dict[str, Any]:
     """Return ComfyUI system info: device, vram, python/comfy version. Use this as a smoke test."""
     return await comfy.system_stats()
-
-
-_SEARCH_STOPWORDS = {
-    "a", "an", "the", "and", "or", "of", "to", "for", "with", "in", "on",
-    "is", "are", "from", "by", "this", "that", "node", "nodes",
-}
-
-
-def _score_query_match(name: str, category: str, description: str, tokens: list[str]) -> int:
-    """All tokens must match somewhere; score by where (name>category>description)."""
-    name_l = name.lower()
-    cat_l = (category or "").lower()
-    desc_l = (description or "").lower()
-    total = 0
-    for t in tokens:
-        ts = 0
-        if t == name_l:
-            ts = 200
-        elif t in name_l:
-            ts = 80
-        if t in cat_l:
-            ts = max(ts, 60)
-        if t in desc_l:
-            ts = max(ts, 40)
-        if ts == 0:
-            return 0
-        total += ts
-    return total
 
 
 @mcp.tool()
@@ -417,49 +442,6 @@ async def describe_workflow(
         return out
 
     return _describe_workflow_file(path, summary_only)
-
-
-def _describe_workflow_file(path: str, summary_only: bool = False) -> dict[str, Any]:
-    """Sync helper for the file-path branch of describe_workflow. Used by catalog_workflows."""
-    p = Path(path).expanduser()
-    if not p.is_absolute():
-        try:
-            root = _comfy_root() / "user" / "default" / "workflows"
-            cand = root / path
-            if cand.exists():
-                p = cand
-        except RuntimeError:
-            pass
-    p = p.resolve()
-    if not p.is_file():
-        return {"error": "not a file", "resolved_path": str(p)}
-
-    try:
-        wf = json.loads(p.read_text())
-    except json.JSONDecodeError as e:
-        return {"error": f"invalid json: {e}", "path": str(p)}
-
-    out: dict[str, Any] = {"path": str(p), **_summarize_workflow_body(wf, summary_only)}
-
-    sidecar = p.with_suffix(".md")
-    if sidecar.is_file():
-        try:
-            text = sidecar.read_text(errors="replace")
-            out["sidecar_md_path"] = str(sidecar)
-            out["sidecar_md"] = text[:6000]
-        except OSError:
-            pass
-
-    folder_notes = p.parent / "_NOTES.md"
-    if folder_notes.is_file():
-        try:
-            text = folder_notes.read_text(errors="replace")
-            out["folder_notes_path"] = str(folder_notes)
-            out["folder_notes"] = text[:4000]
-        except OSError:
-            pass
-
-    return out
 
 
 @mcp.tool()
@@ -1288,37 +1270,6 @@ async def view_file(
     }
 
 
-def _resize_image_for_inline(data: bytes, max_long_edge: int = 2048, quality: int = 85) -> bytes | None:
-    """Resize an image so its long edge is ≤ max_long_edge, encode as JPEG.
-    Returns None if PIL unavailable or resize fails; caller falls back to metadata."""
-    try:
-        from PIL import Image as PILImage  # type: ignore[import-not-found]
-        import io
-    except ImportError:
-        return None
-    try:
-        img = PILImage.open(io.BytesIO(data))
-        if img.mode in ("RGBA", "LA", "P"):
-            # JPEG can't carry alpha; flatten onto white
-            bg = PILImage.new("RGB", img.size, (255, 255, 255))
-            if img.mode == "P":
-                img = img.convert("RGBA")
-            bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
-            img = bg
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
-        w, h = img.size
-        long_edge = max(w, h)
-        if long_edge > max_long_edge:
-            scale = max_long_edge / long_edge
-            img = img.resize((int(w * scale), int(h * scale)), PILImage.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=quality, optimize=True)
-        return buf.getvalue()
-    except Exception:
-        return None
-
-
 @mcp.tool()
 async def get_node_widgets(node_id: str, tab_id: str = "") -> dict[str, Any]:
     """Token-efficient: read just one node's widget values from the open tab.
@@ -1514,72 +1465,6 @@ async def apply_workflow(
     return result
 
 
-def _read_workflow_for_apply(raw_path: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Resolve + read a workflow JSON for apply_workflow's path= branch.
-    Returns (workflow, error). Exactly one is non-None."""
-    p = Path(raw_path).expanduser()
-    if not p.is_absolute():
-        try:
-            base = _comfy_root() / "user" / "default" / "workflows"
-            cand = base / raw_path
-            if cand.exists():
-                p = cand
-        except RuntimeError:
-            pass
-    p = p.resolve()
-    if not p.is_file():
-        return None, {"ok": False, "error": "not a file", "resolved_path": str(p)}
-    try:
-        wf = json.loads(p.read_text())
-    except (OSError, json.JSONDecodeError) as e:
-        return None, {"ok": False, "error": f"could not read JSON: {e}", "path": str(p)}
-    return wf, None
-
-
-_SNAPSHOT_RETENTION = 5
-
-
-async def _save_pre_apply_snapshot(tab_id: str | None) -> dict[str, Any]:
-    """Save the current tab's workflow to output/_snapshots/. Best-effort: any failure
-    is reported via the returned dict but never raises.
-
-    Returns {path?, warning?}. An empty dict means no tab to snapshot or root resolution
-    failed — caller treats this as "no snapshot saved" without surfacing an error since
-    the apply itself can still succeed.
-    """
-    state = await comfy.bridge_state(tab_id=tab_id)
-    if state.get("error") or state.get("workflow") is None:
-        return {"warning": "no current workflow available to snapshot"}
-
-    actual_tab = state.get("tab_id") or "unknown"
-    safe_tab = re.sub(r"[^A-Za-z0-9_-]", "_", str(actual_tab))[:40]
-    try:
-        root = _comfy_root()
-    except RuntimeError as e:
-        return {"warning": f"snapshot skipped: {e}"}
-    snap_dir = root / "output" / "_snapshots"
-    try:
-        snap_dir.mkdir(parents=True, exist_ok=True)
-        ts = int(time.time())
-        target = snap_dir / f"{safe_tab}_{ts}.json"
-        target.write_text(json.dumps(state["workflow"], indent=2))
-    except OSError as e:
-        return {"warning": f"snapshot write failed: {e}"}
-
-    # Prune old snapshots for this tab — keep last N
-    try:
-        existing = sorted(snap_dir.glob(f"{safe_tab}_*.json"))
-        for old in existing[:-_SNAPSHOT_RETENTION]:
-            try:
-                old.unlink()
-            except OSError:
-                pass
-    except OSError:
-        pass
-
-    return {"path": str(target)}
-
-
 @mcp.tool()
 async def restore_snapshot(
     tab_id: str = "",
@@ -1726,37 +1611,6 @@ async def wait_for_completion(
     return result
 
 
-def _strip_history_warnings(history: dict[str, Any]) -> dict[str, Any]:
-    """Drop noise lines from history.status.messages. ComfyUI structures these as
-    [event_type, payload_dict] pairs; messages of type 'logs' or with a nested 'entries'
-    list are the heaviest. Mutates a shallow copy."""
-    status = history.get("status")
-    if not isinstance(status, dict):
-        return history
-    messages = status.get("messages")
-    if not isinstance(messages, list):
-        return history
-
-    cleaned: list[Any] = []
-    for msg in messages:
-        if not isinstance(msg, list) or len(msg) < 2:
-            cleaned.append(msg)
-            continue
-        ev_type, payload = msg[0], msg[1]
-        if isinstance(payload, dict) and isinstance(payload.get("entries"), list):
-            kept = [e for e in payload["entries"]
-                    if not isinstance(e, str) or not _is_log_noise(e)]
-            if kept:
-                cleaned.append([ev_type, {**payload, "entries": kept}])
-            continue
-        if isinstance(payload, dict) and isinstance(payload.get("message"), str):
-            if _is_log_noise(payload["message"]):
-                continue
-        cleaned.append(msg)
-
-    return {**history, "status": {**status, "messages": cleaned}}
-
-
 @mcp.tool()
 def copy_to_input(
     filename: str,
@@ -1799,29 +1653,6 @@ def copy_to_input(
         "source_path": str(src),
         "bytes": dest.stat().st_size,
     }
-
-
-# OpenPose 18-keypoint connections (1-indexed in original; 0-indexed here).
-# Standard COCO_18 / BODY_25 layout — first 18 indices are body, then optional ears.
-_OPENPOSE_LIMB_PAIRS = [
-    (1, 2), (1, 5), (2, 3), (3, 4), (5, 6), (6, 7),  # arms
-    (1, 8), (8, 9), (9, 10), (1, 11), (11, 12), (12, 13),  # legs
-    (1, 0), (0, 14), (14, 16), (0, 15), (15, 17),  # head/face
-]
-_OPENPOSE_LIMB_COLORS = [
-    (255, 0, 0), (255, 85, 0), (255, 170, 0), (255, 255, 0),
-    (170, 255, 0), (85, 255, 0), (0, 255, 0), (0, 255, 85),
-    (0, 255, 170), (0, 255, 255), (0, 170, 255), (0, 85, 255),
-    (0, 0, 255), (85, 0, 255), (170, 0, 255), (255, 0, 255),
-    (255, 0, 170),
-]
-_OPENPOSE_JOINT_COLORS = [
-    (255, 0, 0), (255, 85, 0), (255, 170, 0), (255, 255, 0),
-    (170, 255, 0), (85, 255, 0), (0, 255, 0), (0, 255, 85),
-    (0, 255, 170), (0, 255, 255), (0, 170, 255), (0, 85, 255),
-    (0, 0, 255), (85, 0, 255), (170, 0, 255), (255, 0, 255),
-    (255, 0, 170), (255, 0, 85),
-]
 
 
 @mcp.tool()
@@ -2151,143 +1982,6 @@ def tail_log(
         }
     except OSError as e:
         return {"path": str(p), "error": str(e)}
-
-
-# Noise patterns: HF/transformers weight printouts, common progress bars, and lines
-# that are pure metadata. Compiled once at module import.
-_NOISE_PATTERNS = [
-    # HuggingFace transformers weight enumeration: ".language_model.layers.0.mlp.weight"
-    re.compile(r"^\s*(model\.)?(language_model|vision_model|text_encoder|encoder|decoder|transformer)\..*\.(weight|bias|gamma|beta|running_mean|running_var)\s*$"),
-    re.compile(r"^\s*[\w.]+\.layers\.\d+\..*\.(weight|bias)\s*$"),
-    # tqdm-style progress bars (Unicode-block AND ASCII-hash variants)
-    re.compile(r"^\s*\d+%\|[█▌▏#=\- ]*\|\s*\d+/\d+"),
-    re.compile(r"^\s*\d+it \[\d+:\d+, "),
-    # ComfyUI per-token sampler progress (a single line that gets cleared via \r in TTYs but
-    # ends up as separate lines in file logs)
-    re.compile(r"^\s*\d+%\|.* it/s\]"),
-]
-
-
-def _is_log_noise(line: str) -> bool:
-    return any(p.match(line) for p in _NOISE_PATTERNS)
-
-
-def _extract_traceback_blocks(all_lines: list[str], limit: int) -> list[dict[str, Any]]:
-    """Extract the last `limit` traceback blocks from log lines.
-
-    A block runs from a 'Traceback (most recent call last):' marker through the
-    last indented frame and the final exception line (typically un-indented and
-    starting with the exception class name + ':').
-    """
-    blocks: list[dict[str, Any]] = []
-    i = 0
-    n = len(all_lines)
-    while i < n:
-        if "Traceback (most recent call last):" in all_lines[i]:
-            start = i
-            j = i + 1
-            # Walk forward over indented frame lines + a trailing un-indented exception line.
-            # Stop when we hit a line that's neither indented nor matches the exception pattern.
-            exception_line_idx = None
-            while j < n:
-                ln = all_lines[j]
-                if ln.startswith((" ", "\t")):
-                    j += 1
-                    continue
-                # Un-indented line: the exception terminator if it looks like "Foo: msg"
-                if exception_line_idx is None and re.match(r"^[A-Z][\w.]*(Error|Exception|Warning|Interrupt|Failed|NotImplemented)[\w.]*: ", ln):
-                    exception_line_idx = j
-                    j += 1
-                    break
-                if exception_line_idx is None and re.match(r"^[\w.]+: \S", ln):
-                    exception_line_idx = j
-                    j += 1
-                    break
-                # End of block without classic terminator
-                break
-            end = j
-            preceding = all_lines[max(0, start - 1)] if start > 0 else ""
-            blocks.append({
-                "start_line": start,
-                "preceding_line": preceding[-300:],
-                "lines": all_lines[start:end],
-                "exception": all_lines[exception_line_idx][:500] if exception_line_idx is not None else None,
-            })
-            i = end
-            continue
-        i += 1
-    return blocks[-limit:] if limit > 0 else blocks
-
-
-async def _enrich_node_errors(
-    node_errors: dict[str, Any], workflow: dict[str, Any]
-) -> dict[str, Any]:
-    """Backfill `valid_values` on value_not_in_list errors where ComfyUI returned a null
-    input_config (happens for dynamically-populated combos like model lists)."""
-    if not node_errors:
-        return node_errors
-    out: dict[str, Any] = {}
-    for node_id, info in node_errors.items():
-        info_copy = dict(info)
-        errs_out: list[dict[str, Any]] = []
-        for err in info.get("errors", []) or []:
-            err_copy = dict(err)
-            if err.get("type") == "value_not_in_list":
-                extra = err.get("extra_info") or {}
-                input_name = extra.get("input_name")
-                input_config = extra.get("input_config")
-                already_have_list = (
-                    isinstance(input_config, list)
-                    and input_config
-                    and isinstance(input_config[0], list)
-                )
-                if input_name and not already_have_list:
-                    class_type = info.get("class_type") or (
-                        workflow.get(node_id, {}).get("class_type")
-                        if isinstance(node_id, str)
-                        else None
-                    )
-                    if class_type:
-                        try:
-                            oi = await comfy.object_info(class_type)
-                            spec = (oi.get(class_type, {}) or {}).get("input", {}) or {}
-                            for section in ("required", "optional"):
-                                decl = (spec.get(section) or {}).get(input_name)
-                                if decl:
-                                    t = (
-                                        decl[0]
-                                        if isinstance(decl, (list, tuple)) and decl
-                                        else None
-                                    )
-                                    if isinstance(t, list):
-                                        err_copy["valid_values"] = t
-                                    break
-                        except Exception:
-                            pass
-            errs_out.append(err_copy)
-        info_copy["errors"] = errs_out
-        out[node_id] = info_copy
-    return out
-
-
-def _fuzzy_match_list(needle: str, haystack: list) -> list[dict[str, Any]]:
-    """Find candidates in haystack that resemble needle by basename (sans dir + ext)."""
-    if not isinstance(needle, str) or not isinstance(haystack, list):
-        return []
-    needle_base = _basename_no_ext(needle).lower()
-    out: list[dict[str, Any]] = []
-    for item in haystack:
-        if not isinstance(item, str):
-            continue
-        item_base = _basename_no_ext(item).lower()
-        if item_base == needle_base:
-            out.append({"value": item, "score": 100, "reason": "exact basename match"})
-        elif item_base.startswith(needle_base) or needle_base.startswith(item_base):
-            out.append({"value": item, "score": 80, "reason": "prefix"})
-        elif needle_base in item_base or item_base in needle_base:
-            out.append({"value": item, "score": 50, "reason": "substring"})
-    out.sort(key=lambda m: -m["score"])
-    return out
 
 
 @mcp.tool()
@@ -2648,54 +2342,6 @@ async def find_model(query: str, category: str = "", limit: int = 20) -> dict[st
     }
 
 
-def _split_query_tokens(query: str) -> list[str]:
-    """Lowercase + split on whitespace/underscore/dash. Drops empties."""
-    return [t for t in re.split(r"[\s_\-]+", query.lower()) if t]
-
-
-def _score_model_path(path: str, q_full: str, tokens: list[str]) -> dict[str, Any] | None:
-    """Score a candidate model path against the query.
-
-    Single-token: legacy substring scoring (100=exact, 80=prefix, 50=substring).
-    Multi-token: every token must appear somewhere in the path. Score is the sum of
-    per-token bonuses, weighted toward basename matches over directory matches, plus
-    a small bonus when ALL tokens land in the basename (the "right one" signal).
-    """
-    base_no_ext = _basename_no_ext(path).lower()
-    path_l = path.lower()
-
-    if len(tokens) <= 1:
-        # Legacy single-token mode — preserves existing callers
-        if q_full == base_no_ext:
-            return {"score": 100, "matched_in_basename": True}
-        if base_no_ext.startswith(q_full):
-            return {"score": 80, "matched_in_basename": True}
-        if q_full in base_no_ext:
-            return {"score": 50, "matched_in_basename": True}
-        return None
-
-    score = 0
-    in_base = 0
-    for tok in tokens:
-        if tok in base_no_ext:
-            score += 30
-            in_base += 1
-        elif tok in path_l:
-            score += 10  # matched in directory only — weaker signal
-        else:
-            return None  # AND-semantics: every token must appear
-
-    # Bonuses for fully-in-basename hits and for full string match
-    if in_base == len(tokens):
-        score += 20
-    if base_no_ext == q_full:
-        score += 50
-    elif base_no_ext.startswith(q_full):
-        score += 20
-
-    return {"score": score, "matched_in_basename": in_base == len(tokens)}
-
-
 @mcp.tool()
 async def validate_workflow(workflow: dict[str, Any]) -> dict[str, Any]:
     """Dry-run an API-format workflow through ComfyUI's validator without running it.
@@ -2814,62 +2460,6 @@ async def validate_workflow_models(
         "unresolved": unresolved,
         "unknown_loader": unknown_loader,
     }
-
-
-def _extract_model_widget_refs(workflow: dict[str, Any], fmt: str) -> list[dict[str, Any]]:
-    """Like `_extract_model_refs` but always returns {node_id, class_type, input_name, value}
-    regardless of UI vs API format. For UI format, maps positional widgets_values to
-    input names via /object_info — but we can't do an async lookup here, so we fall back
-    to a heuristic: emit each model-extension widget value with input_name=None when we
-    can't infer it. Caller resolves names later as needed.
-
-    For API format we already have explicit {input_name: value} mappings — much cleaner.
-    """
-    out: list[dict[str, Any]] = []
-    if fmt == "api":
-        for nid, nd in workflow.items():
-            if not isinstance(nd, dict):
-                continue
-            class_type = nd.get("class_type")
-            for k, v in (nd.get("inputs") or {}).items():
-                if isinstance(v, str) and v.lower().endswith(_MODEL_FILE_EXTS):
-                    out.append({"node_id": nid, "class_type": class_type, "input_name": k, "value": v})
-        return out
-
-    # UI format: walk nodes incl. subgraph contents. We don't know widget names without
-    # /object_info, so use _ui_widget_order_aligned at validate-time to map them. Here
-    # we just collect raw values; caller does the name resolution.
-    if isinstance(workflow.get("nodes"), list):
-        for n in _all_nodes(workflow):
-            class_type = n.get("type")
-            if not class_type:
-                continue
-            for v in n.get("widgets_values") or []:
-                if isinstance(v, str) and v.lower().endswith(_MODEL_FILE_EXTS):
-                    out.append({"node_id": n.get("id"), "class_type": class_type,
-                                "input_name": None, "value": v})
-    return out
-
-
-def _valid_values_for_input(spec: dict[str, Any], input_name: str | None) -> Any:
-    """Pull the valid_values list (the combo list) for a named input from /object_info.
-    Returns the list, or None if not a combo. With input_name=None (UI-format fallback
-    where we couldn't determine the name), scans all combo inputs and returns the first
-    one that contains a model-extension entry — a reasonable approximation."""
-    inputs = spec.get("input", {}) if isinstance(spec, dict) else {}
-    for section in ("required", "optional"):
-        decls = (inputs.get(section) or {})
-        if input_name and input_name in decls:
-            decl = decls[input_name]
-            t = decl[0] if isinstance(decl, (list, tuple)) and decl else None
-            return t if isinstance(t, list) else None
-        if input_name is None:
-            for _name, decl in decls.items():
-                t = decl[0] if isinstance(decl, (list, tuple)) and decl else None
-                if isinstance(t, list) and t and isinstance(t[0], str) \
-                        and t[0].lower().endswith(_MODEL_FILE_EXTS):
-                    return t
-    return None
 
 
 @mcp.tool()
@@ -3038,49 +2628,6 @@ def list_failed_imports(path: str = "", with_tracebacks: bool = True) -> dict[st
     }
 
 
-def _traceback_block_above(lines: list[str], idx: int, max_lookback: int = 200) -> list[str] | None:
-    """Walk backward from idx looking for the most recent 'Traceback (most recent call last):'
-    marker, then return that block (forward-walked from there). None if not found nearby."""
-    start_search = max(0, idx - max_lookback)
-    for j in range(idx - 1, start_search - 1, -1):
-        if "Traceback (most recent call last):" in lines[j]:
-            return _walk_traceback(lines, j)
-    return None
-
-
-def _traceback_block_below(lines: list[str], idx: int, max_lookahead: int = 200) -> list[str] | None:
-    """Walk forward from idx looking for the next 'Traceback (most recent call last):' marker."""
-    end = min(len(lines), idx + max_lookahead)
-    for j in range(idx + 1, end):
-        if "Traceback (most recent call last):" in lines[j]:
-            return _walk_traceback(lines, j)
-    return None
-
-
-def _walk_traceback(lines: list[str], start: int) -> list[str]:
-    """Forward-walk an intact traceback block starting at `start`. Includes the
-    Traceback marker, indented frames, and the final exception-class line if present."""
-    if start >= len(lines):
-        return []
-    out = [lines[start]]
-    j = start + 1
-    while j < len(lines):
-        ln = lines[j]
-        if ln.startswith((" ", "\t")):
-            out.append(ln)
-            j += 1
-            continue
-        # Un-indented terminator: classic "ClassName: message" or "ClassName"
-        if re.match(r"^[A-Z][\w.]*(Error|Exception|Warning|Interrupt|Failed|NotImplemented)[\w.]*(:\s|$)", ln):
-            out.append(ln)
-            break
-        if re.match(r"^[\w.]+: \S", ln):
-            out.append(ln)
-            break
-        break
-    return out
-
-
 @mcp.tool()
 def list_custom_nodes() -> dict[str, Any]:
     """List custom_node packages installed under <COMFYUI_ROOT>/custom_nodes.
@@ -3115,100 +2662,6 @@ def list_custom_nodes() -> dict[str, Any]:
     return {"root": str(root), "count": len(packages), "packages": packages}
 
 
-_comfy_root_cache: Path | None = None
-
-
-def _comfy_root() -> Path:
-    """Locate the ComfyUI installation root in priority order:
-      1. COMFYUI_ROOT env var
-      2. Current working directory if it looks like a ComfyUI install
-      3. The cwd of the process listening on COMFYUI_URL's port (via psutil) —
-         catches the common case where Claude Code runs from /home/charlie but
-         ComfyUI is running from /home/charlie/projects/.../ComfyUI.
-    Result is cached after first successful resolution.
-    """
-    global _comfy_root_cache
-    if _comfy_root_cache is not None:
-        return _comfy_root_cache
-
-    env = os.environ.get("COMFYUI_ROOT")
-    if env:
-        _comfy_root_cache = Path(env).expanduser().resolve()
-        return _comfy_root_cache
-
-    cwd = Path.cwd()
-    if (cwd / "main.py").exists() and (cwd / "custom_nodes").exists():
-        _comfy_root_cache = cwd
-        return cwd
-
-    detected = _detect_comfy_root_via_port()
-    if detected is not None:
-        _comfy_root_cache = detected
-        return detected
-
-    raise RuntimeError(
-        f"ComfyUI root not found. Set COMFYUI_ROOT env var, launch from the ComfyUI dir, "
-        f"or ensure ComfyUI is running on {os.environ.get('COMFYUI_URL', 'http://127.0.0.1:8188')} "
-        f"(current cwd: {cwd})"
-    )
-
-
-def _detect_comfy_root_via_port() -> Path | None:
-    """Find the process listening on the ComfyUI port and use its cwd. Returns None on
-    any failure (no psutil, no listener, perms, etc) — caller falls back to error."""
-    try:
-        import psutil
-        from urllib.parse import urlparse
-    except ImportError:
-        return None
-    url = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
-    try:
-        port = urlparse(url).port or 8188
-    except Exception:
-        return None
-    try:
-        for conn in psutil.net_connections(kind="inet"):
-            if conn.status != psutil.CONN_LISTEN:
-                continue
-            if conn.laddr and conn.laddr.port == port and conn.pid:
-                try:
-                    proc = psutil.Process(conn.pid)
-                    cwd = Path(proc.cwd())
-                    if (cwd / "main.py").exists() and (cwd / "custom_nodes").exists():
-                        return cwd
-                except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
-                    continue
-    except (psutil.AccessDenied, OSError):
-        return None
-    return None
-
-
-def _walk_json(base: Path) -> dict[str, Any]:
-    if not base.exists():
-        return {"root": str(base), "error": "not found (broken symlink?)", "files": []}
-    if not base.is_dir():
-        return {"root": str(base), "error": "not a directory", "files": []}
-    files = []
-    try:
-        for p in sorted(base.rglob("*.json")):
-            if p.is_file():
-                st = p.stat()
-                files.append(
-                    {
-                        "path": str(p),
-                        "rel": str(p.relative_to(base)),
-                        "size": st.st_size,
-                        "mtime": int(st.st_mtime),
-                    }
-                )
-    except OSError as e:
-        return {"root": str(base), "error": str(e), "files": files}
-    return {"root": str(base), "count": len(files), "files": files}
-
-
-_WIDGET_TYPES = {"STRING", "INT", "FLOAT", "BOOLEAN"}
-
-
 async def _edit_api(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) -> dict[str, Any]:
     wf = copy.deepcopy(workflow)
     applied: list[dict[str, Any]] = []
@@ -3223,61 +2676,6 @@ async def _edit_api(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) 
             node["inputs"][name] = value
         applied.append({"node_id": node_id, "inputs": list(inputs.keys())})
     return {"workflow": wf, "format": "api", "applied": applied, "errors": errors}
-
-
-async def _ui_widget_order_aligned(class_type: str, actual_len: int) -> tuple[list[str], str]:
-    """Pick the widget-name order that matches the actual widgets_values length.
-
-    Different ComfyUI nodes follow different conventions for the seed_control_after_generate
-    synthetic widget — most stock nodes have it, but custom nodes (Impact Pack's FaceDetailer,
-    UltimateSDUpscale, etc.) often don't, even when their seed widget declares
-    control_after_generate: True. Trying both variants and picking the matching length is
-    the only robust resolution without per-node hardcoding.
-
-    Returns (order, confidence) where confidence ∈ {"with_control", "without_control",
-    "best_guess"} — agents/UI can surface "best_guess" cases as a warning.
-    """
-    with_control = await _ui_widget_order(class_type)
-    if len(with_control) == actual_len:
-        return with_control, "with_control"
-    without_control = [n for n in with_control if not n.endswith("_control_after_generate")]
-    if len(without_control) == actual_len:
-        return without_control, "without_control"
-    # Neither matches — return whichever is closer in length, with low confidence
-    diff_with = abs(len(with_control) - actual_len)
-    diff_without = abs(len(without_control) - actual_len)
-    return (with_control if diff_with <= diff_without else without_control), "best_guess"
-
-
-async def _ui_widget_order(class_type: str) -> list[str]:
-    """Map widget input names to their positional index in widgets_values for a node class.
-
-    Critical: accounts for synthetic *_control_after_generate widgets that ComfyUI's
-    frontend injects right after any widget with `control_after_generate: True` in its
-    options (most commonly `seed` on KSampler). Without this, the position-to-name
-    mapping silently shifts after the seed and corrupts edits/reads from that point on.
-    """
-    info = await comfy.object_info(class_type)
-    spec = info.get(class_type, {}).get("input", {})
-    order: list[str] = []
-    for section in ("required", "optional"):
-        for name, decl in (spec.get(section) or {}).items():
-            t = decl[0] if isinstance(decl, (list, tuple)) and decl else decl
-            opts = decl[1] if isinstance(decl, (list, tuple)) and len(decl) > 1 else {}
-            opts = opts if isinstance(opts, dict) else {}
-            is_widget = False
-            if isinstance(t, list):
-                if not opts.get("forceInput"):
-                    order.append(name)  # COMBO[...]
-                    is_widget = True
-            elif isinstance(t, str) and t in _WIDGET_TYPES:
-                if not opts.get("forceInput"):
-                    order.append(name)
-                    is_widget = True
-            # Frontend-injected control widget for INT seed-style inputs
-            if is_widget and opts.get("control_after_generate"):
-                order.append(f"{name}_control_after_generate")
-    return order
 
 
 async def _edit_ui(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -3325,570 +2723,6 @@ async def _edit_ui(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) -
             applied.append(entry)
 
     return {"workflow": wf, "format": "ui", "applied": applied, "errors": errors}
-
-
-def _read_safetensors_metadata(path: Path) -> dict[str, Any]:
-    """Read the JSON header from a .safetensors file. Cheap (reads at most ~100MB,
-    typically <2MB), and fails fast on truncation/corruption — exactly what catches
-    incomplete downloads before they hit a runtime crash."""
-    try:
-        size = path.stat().st_size
-        with path.open("rb") as f:
-            head = f.read(8)
-            if len(head) < 8:
-                return {"error": "file too short to contain a header"}
-            header_len = int.from_bytes(head, "little")
-            if header_len <= 0:
-                return {"error": f"non-positive header length {header_len}"}
-            if header_len > 100_000_000:
-                return {"error": f"absurd header length {header_len} (file likely not safetensors)"}
-            if 8 + header_len > size:
-                return {
-                    "error": "header truncated — file is incomplete (partial download?)",
-                    "expected_at_least_bytes": 8 + header_len,
-                    "actual_bytes": size,
-                }
-            body = f.read(header_len)
-            if len(body) < header_len:
-                return {"error": "could not read full header"}
-        try:
-            hdr = json.loads(body.decode("utf-8"))
-        except json.JSONDecodeError as e:
-            return {"error": f"invalid JSON header: {e}"}
-        except UnicodeDecodeError as e:
-            return {"error": f"header is not UTF-8: {e}"}
-        meta = hdr.get("__metadata__") or {}
-        tensor_count = sum(1 for k in hdr if k != "__metadata__")
-
-        # Check tensor data isn't truncated. Header lists each tensor's data_offsets
-        # [start, end] relative to the start of the data block (which begins at
-        # byte 8 + header_len). If the highest 'end' exceeds the file's actual
-        # remaining bytes, the safetensors is corrupted — even if the header
-        # itself parses cleanly. This is the "file not fully covered" case.
-        max_end = 0
-        for k, v in hdr.items():
-            if k == "__metadata__" or not isinstance(v, dict):
-                continue
-            offsets = v.get("data_offsets")
-            if isinstance(offsets, list) and len(offsets) >= 2 and isinstance(offsets[1], int):
-                if offsets[1] > max_end:
-                    max_end = offsets[1]
-        expected_total = 8 + header_len + max_end
-        if expected_total > size:
-            return {
-                "error": "tensor data truncated — file is incomplete (partial download?)",
-                "expected_bytes": expected_total,
-                "actual_bytes": size,
-                "shortfall_bytes": expected_total - size,
-                "metadata": meta,
-                "tensor_count": tensor_count,
-            }
-
-        return {
-            "metadata": meta,
-            "tensor_count": tensor_count,
-            "header_bytes": header_len,
-            "tensor_data_bytes": max_end,
-        }
-    except OSError as e:
-        return {"error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# describe_model helpers
-# ---------------------------------------------------------------------------
-
-# Kind classification: by category subdir first, then heuristic from filename + suffix
-_LORA_CATEGORIES = {"loras", "lycoris"}
-_CHECKPOINT_CATEGORIES = {"checkpoints", "diffusion_models", "diffusers"}
-_UPSCALER_CATEGORIES = {"upscale_models"}
-_CONTROLNET_CATEGORIES = {"controlnet"}
-_VAE_CATEGORIES = {"vae", "vae_approx"}
-_CLIP_CATEGORIES = {"text_encoders", "clip", "clip_vision"}
-
-# Noisy safetensors metadata keys we drop — useful distillations end up in summary anyway
-_NOISY_META_KEYS = {
-    "ss_tag_frequency", "ss_dataset_dirs", "ss_datasets", "ss_bucket_info",
-    "ss_session_id", "ss_training_started_at", "ss_training_finished_at",
-    "ss_sd_scripts_commit_hash", "ss_steps", "ss_epoch",
-    "ss_training_comment", "ss_full_fp16", "ss_seed", "ss_v2",
-    "ss_face_crop_aug_range", "ss_random_crop", "ss_keep_tokens",
-    "ss_max_grad_norm", "ss_max_token_length", "ss_min_snr_gamma",
-    "ss_caption_dropout_rate", "ss_caption_dropout_every_n_epochs",
-    "ss_caption_tag_dropout_rate", "ss_color_aug", "ss_flip_aug",
-    "ss_gradient_accumulation_steps", "ss_gradient_checkpointing",
-    "ss_huber_c", "ss_huber_schedule", "ss_loss_type",
-    "ss_lr_scheduler", "ss_lr_warmup_steps", "ss_max_train_steps",
-    "ss_mixed_precision", "ss_multires_noise_discount",
-    "ss_multires_noise_iterations", "ss_network_alpha",
-    "ss_network_args", "ss_network_dropout", "ss_network_module",
-    "ss_new_sd_model_hash", "ss_noise_offset", "ss_noise_offset_random_strength",
-    "ss_num_batches_per_epoch", "ss_num_epochs", "ss_num_reg_images",
-    "ss_num_train_images", "ss_optimizer", "ss_prior_loss_weight",
-    "ss_resolution", "ss_scale_weight_norms", "ss_sd_model_hash",
-    "ss_text_encoder_lr", "ss_unet_lr", "ss_zero_terminal_snr",
-    "ss_ip_noise_gamma", "ss_ip_noise_gamma_random_strength",
-    "ss_debiased_estimation", "ss_lowram", "ss_clip_skip",
-    "ss_cache_latents", "ss_adaptive_noise_scale",
-    "sshs_model_hash", "sshs_legacy_hash",
-    "ss_sd_model_name",  # often huge path strings
-}
-
-
-def _classify_model(path: Path, category: str) -> str:
-    """Classify model kind from category + filename + suffix."""
-    cat = (category or "").lower()
-    if cat in _LORA_CATEGORIES or "lora" in path.parts or "lora" in path.stem.lower():
-        return "lora"
-    if cat in _CHECKPOINT_CATEGORIES:
-        return "checkpoint"
-    if cat in _UPSCALER_CATEGORIES or path.suffix.lower() in (".pth", ".pt"):
-        # .pth/.pt typically upscalers; safetensors in upscale_models also valid
-        return "upscaler"
-    if cat in _CONTROLNET_CATEGORIES:
-        return "controlnet"
-    if cat in _VAE_CATEGORIES:
-        return "vae"
-    if cat in _CLIP_CATEGORIES:
-        return "text_encoder"
-    # Heuristic fallback: try to infer from path components
-    parts_lower = {p.lower() for p in path.parts}
-    if parts_lower & _LORA_CATEGORIES:
-        return "lora"
-    if parts_lower & _CHECKPOINT_CATEGORIES:
-        return "checkpoint"
-    if parts_lower & _UPSCALER_CATEGORIES:
-        return "upscaler"
-    if parts_lower & _CONTROLNET_CATEGORIES:
-        return "controlnet"
-    return "other"
-
-
-def _trim_safetensors_metadata(meta: dict[str, Any]) -> dict[str, Any]:
-    """Drop noisy raw fields from kohya-style safetensors metadata. The useful bits
-    (top tags, trigger phrase, architecture) are extracted into `summary` separately."""
-    return {k: v for k, v in meta.items() if k not in _NOISY_META_KEYS}
-
-
-def _model_summary(kind: str, meta: dict[str, Any], sf: dict[str, Any] | None) -> dict[str, Any]:
-    """Build the type-aware, structured summary the agent actually needs."""
-    summary: dict[str, Any] = {
-        "kind": kind,
-        "title": meta.get("modelspec.title"),
-        "description": (meta.get("modelspec.description") or "")[:500] or None,
-        "architecture": meta.get("modelspec.architecture") or meta.get("ss_base_model_version"),
-    }
-    if kind == "lora":
-        summary["trigger_phrase"] = meta.get("modelspec.trigger_phrase")
-        summary["output_name"] = meta.get("ss_output_name")
-        summary["training_top_tags"] = _top_training_tags(meta, limit=15)
-        summary["recommended_strength_range"] = "0.4-0.7 (typical)"
-    elif kind == "checkpoint":
-        summary["embedded_vae"] = meta.get("modelspec.has_vae")
-        summary["sai_resolution"] = meta.get("modelspec.resolution")
-    elif kind == "controlnet":
-        summary["controlnet_type"] = meta.get("modelspec.implementation") or "(check filename for hint: depth/canny/openpose/tile/...)"
-    return {k: v for k, v in summary.items() if v is not None}
-
-
-def _top_training_tags(meta: dict[str, Any], limit: int = 15) -> list[str]:
-    """Extract the most-frequent training tags from kohya's ss_tag_frequency JSON."""
-    tags = meta.get("ss_tag_frequency")
-    if not isinstance(tags, str):
-        return []
-    try:
-        tag_dict = json.loads(tags)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    flat: dict[str, int] = {}
-    for _ds, counts in tag_dict.items():
-        if isinstance(counts, dict):
-            for tag, count in counts.items():
-                flat[tag] = flat.get(tag, 0) + (count if isinstance(count, int) else 1)
-    return [t for t, _ in sorted(flat.items(), key=lambda x: -x[1])[:limit]]
-
-
-def _inspect_pytorch_state(path: Path) -> dict[str, Any]:
-    """Read a .pth/.pt PyTorch state dict safely (weights_only=True). Returns key stats
-    the agent can reason about without loading the full model: tensor count, common
-    shape patterns, key prefixes (which hint at architecture)."""
-    try:
-        import torch  # type: ignore[import-untyped]
-    except ImportError:
-        return {"error": "torch not available; install for .pth inspection"}
-    try:
-        # weights_only=True since 2.4 — safely reject pickled callables
-        state = torch.load(str(path), map_location="cpu", weights_only=True)
-    except Exception as e:
-        return {"error": f"torch.load failed: {e}"}
-
-    if isinstance(state, dict) and not all(hasattr(v, "shape") for v in state.values()):
-        # nested format — drill in if a 'model'/'state_dict' wrapper is present
-        for key in ("model", "state_dict", "params"):
-            if key in state and isinstance(state[key], dict):
-                state = state[key]
-                break
-
-    if not isinstance(state, dict):
-        return {"error": f"unexpected state type: {type(state).__name__}"}
-
-    keys = list(state.keys())
-    # Common architecture key prefixes
-    key_prefixes: dict[str, int] = {}
-    for k in keys:
-        prefix = str(k).split(".", 1)[0]
-        key_prefixes[prefix] = key_prefixes.get(prefix, 0) + 1
-    top_prefixes = sorted(key_prefixes.items(), key=lambda x: -x[1])[:5]
-    return {
-        "tensor_count": len(keys),
-        "top_key_prefixes": [{"prefix": p, "count": c} for p, c in top_prefixes],
-        "first_keys": keys[:5],
-    }
-
-
-def _upscaler_summary_from_state(info: dict[str, Any]) -> dict[str, Any]:
-    """Infer scale factor + architecture flavor from a torch state dict's key shapes.
-    Best-effort — covers the common ESRGAN / Real-ESRGAN / SwinIR / SRVGGNet patterns."""
-    if "error" in info:
-        return {"error": info["error"]}
-    prefixes = {p["prefix"]: p["count"] for p in info.get("top_key_prefixes", [])}
-    summary: dict[str, Any] = {"kind": "upscaler", "tensor_count": info.get("tensor_count")}
-    if "RRDB_trunk" in prefixes or "RRDB" in str(info.get("first_keys", [])):
-        summary["architecture"] = "ESRGAN (RRDB trunk)"
-    elif "body" in prefixes and "conv_first" in prefixes:
-        summary["architecture"] = "Real-ESRGAN / SRResNet variant"
-    elif "layers" in prefixes:
-        summary["architecture"] = "SwinIR (transformer)"
-    elif "head" in prefixes and "body" in prefixes:
-        summary["architecture"] = "SRVGGNet (Real-ESRGAN compact)"
-    else:
-        summary["architecture"] = "unknown (inspect first_keys for clues)"
-    summary["note"] = "scale factor not auto-detected; check filename (e.g. '4x-AnimeSharp' = 4x)"
-    return summary
-
-
-_NOTE_NODE_TYPES = {"Note", "MarkdownNote", "Note Plus (mtb)", "PrimitiveNode", "easy showAnything"}
-_MODEL_FILE_EXTS = (".safetensors", ".ckpt", ".pth", ".gguf", ".bin", ".pt", ".onnx")
-
-
-def _subgraph_def(workflow: dict[str, Any], type_id: Any) -> dict[str, Any] | None:
-    """Find the subgraph definition with the given UUID/type. Returns the def dict or None."""
-    if not isinstance(type_id, str):
-        return None
-    defs = (workflow.get("definitions") or {}).get("subgraphs") or []
-    for d in defs:
-        if isinstance(d, dict) and d.get("id") == type_id:
-            return d
-    return None
-
-
-def _all_nodes(workflow: dict[str, Any], top: dict[str, Any] | None = None):
-    """Yield every node dict in the workflow, recursing into subgraph definitions."""
-    if top is None:
-        top = workflow
-    for n in workflow.get("nodes") or []:
-        if not isinstance(n, dict):
-            continue
-        yield n
-        sg = _subgraph_def(top, n.get("type"))
-        if sg is not None:
-            yield from _all_nodes(sg, top)
-
-
-def _resolve_node_path(workflow: dict[str, Any], node_id: Any) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Resolve a path-style node_id to (node, container_scope). Path syntax: '<outer>/<inner>'
-    or '<outer>/<inner>/<inner_inner>' for nested subgraphs. Plain ints/strings work for
-    top-level nodes. Returns (None, None) if not found."""
-    parts = str(node_id).split("/")
-    current = workflow
-    found_node = None
-    for i, part in enumerate(parts):
-        try:
-            nid_int = int(part)
-        except (ValueError, TypeError):
-            nid_int = None
-        match = None
-        for n in current.get("nodes") or []:
-            if not isinstance(n, dict):
-                continue
-            n_id = n.get("id")
-            if n_id == nid_int or str(n_id) == part:
-                match = n
-                break
-        if match is None:
-            return None, None
-        found_node = match
-        if i < len(parts) - 1:
-            sg = _subgraph_def(workflow, match.get("type"))
-            if sg is None:
-                return None, None
-            current = sg
-    return found_node, current
-
-
-def _extract_notes(workflow: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract Note/MarkdownNote text from UI-format workflows, including nodes inside
-    subgraph definitions. (API format doesn't carry these.)"""
-    out: list[dict[str, Any]] = []
-    if not isinstance(workflow.get("nodes"), list):
-        return out
-    for n in _all_nodes(workflow):
-        t = n.get("type")
-        if t not in _NOTE_NODE_TYPES:
-            continue
-        for v in n.get("widgets_values") or []:
-            if isinstance(v, str) and v.strip():
-                out.append({"type": t, "id": n.get("id"), "text": v.strip()})
-    return out
-
-
-def _extract_model_refs(workflow: dict[str, Any]) -> list[dict[str, Any]]:
-    """Find every widget value that looks like a model file (by extension), including
-    inside subgraph definitions for UI-format workflows."""
-    out: list[dict[str, Any]] = []
-    if isinstance(workflow.get("nodes"), list):
-        for n in _all_nodes(workflow):
-            for v in n.get("widgets_values") or []:
-                if isinstance(v, str) and v.lower().endswith(_MODEL_FILE_EXTS):
-                    out.append({"node_id": n.get("id"), "node_type": n.get("type"), "value": v})
-    elif isinstance(workflow, dict):
-        for nid, nd in workflow.items():
-            if not isinstance(nd, dict):
-                continue
-            for k, v in (nd.get("inputs") or {}).items():
-                if isinstance(v, str) and v.lower().endswith(_MODEL_FILE_EXTS):
-                    out.append(
-                        {"node_id": nid, "node_type": nd.get("class_type"), "input": k, "value": v}
-                    )
-    return out
-
-
-def _top_node_types(workflow: dict[str, Any], n: int = 8) -> list[str]:
-    counts: dict[str, int] = {}
-    if isinstance(workflow.get("nodes"), list):
-        for nd in _all_nodes(workflow):
-            t = nd.get("type")
-            # Skip subgraph instance "types" (UUIDs) — count their inner contents instead
-            if t and not _subgraph_def(workflow, t):
-                counts[t] = counts.get(t, 0) + 1
-    elif isinstance(workflow, dict):
-        for nd in workflow.values():
-            if isinstance(nd, dict):
-                t = nd.get("class_type")
-                if t:
-                    counts[t] = counts.get(t, 0) + 1
-    ranked = sorted(counts.items(), key=lambda x: -x[1])[:n]
-    return [f"{t}×{c}" if c > 1 else t for t, c in ranked]
-
-
-def _describe_graph(workflow: dict[str, Any]) -> dict[str, Any]:
-    """Distill a UI-format workflow (with subgraphs) to its connection structure.
-
-    Inner-subgraph nodes get path-style ids like '<outer>/<inner>'. Links are scoped to
-    their container — outer-scope link refs use bare ids; inner-scope links reference
-    other inner nodes via the same path prefix.
-    """
-    out_nodes: list[dict[str, Any]] = []
-    orphans: list[str] = []
-    total_links = 0
-
-    def visit(scope_wf: dict[str, Any], path_prefix: str) -> None:
-        nonlocal total_links
-        scope_nodes = scope_wf.get("nodes") or []
-        scope_links = scope_wf.get("links") or []
-        total_links += len(scope_links)
-
-        link_map: dict[Any, dict[str, Any]] = {}
-        for ln in scope_links:
-            if isinstance(ln, list) and len(ln) >= 6:
-                # Top-level array format: [id, from_node, from_slot, to_node, to_slot, type]
-                link_map[ln[0]] = {
-                    "from_node": ln[1], "from_slot": ln[2],
-                    "to_node": ln[3], "to_slot": ln[4], "type": ln[5],
-                }
-            elif isinstance(ln, dict) and ln.get("id") is not None:
-                # Subgraph-definition dict format: {id, origin_id, origin_slot, target_id, target_slot, type}
-                link_map[ln["id"]] = {
-                    "from_node": ln.get("origin_id"), "from_slot": ln.get("origin_slot"),
-                    "to_node": ln.get("target_id"), "to_slot": ln.get("target_slot"),
-                    "type": ln.get("type"),
-                }
-        outgoing: dict[tuple[Any, int], list[Any]] = {}
-        for lid, ln in link_map.items():
-            outgoing.setdefault((ln["from_node"], ln["from_slot"]), []).append(lid)
-
-        def to_path(local_id: Any) -> str:
-            return f"{path_prefix}/{local_id}" if path_prefix else str(local_id)
-
-        for n in scope_nodes:
-            if not isinstance(n, dict):
-                continue
-            nid = n.get("id")
-            ntype = n.get("type")
-            path_id = to_path(nid)
-
-            ins: list[dict[str, Any]] = []
-            any_in = False
-            for inp in n.get("inputs") or []:
-                entry: dict[str, Any] = {"name": inp.get("name"), "type": inp.get("type")}
-                lid = inp.get("link")
-                if lid is not None and lid in link_map:
-                    ln = link_map[lid]
-                    entry["from"] = {"node": to_path(ln["from_node"]), "slot": ln["from_slot"]}
-                    any_in = True
-                ins.append(entry)
-
-            outs: list[dict[str, Any]] = []
-            any_out = False
-            for i, out in enumerate(n.get("outputs") or []):
-                tos = []
-                for lid in outgoing.get((nid, i), []):
-                    ln = link_map.get(lid)
-                    if ln:
-                        tos.append({"node": to_path(ln["to_node"]), "slot": ln["to_slot"]})
-                if tos:
-                    any_out = True
-                outs.append({"name": out.get("name"), "type": out.get("type"), "to": tos})
-
-            if not any_in and not any_out and (n.get("inputs") or n.get("outputs")):
-                orphans.append(path_id)
-
-            entry = {
-                "id": path_id,
-                "type": ntype,
-                "pos": n.get("pos"),
-                "inputs": ins,
-                "outputs": outs,
-            }
-            sg = _subgraph_def(workflow, ntype)
-            if sg is not None:
-                entry["subgraph"] = {
-                    "definition_id": sg.get("id"),
-                    "name": sg.get("name"),
-                    "inner_node_count": len(sg.get("nodes") or []),
-                    "inputs": [i.get("name") for i in (sg.get("inputs") or []) if isinstance(i, dict)],
-                    "outputs": [o.get("name") for o in (sg.get("outputs") or []) if isinstance(o, dict)],
-                }
-            out_nodes.append(entry)
-
-            if sg is not None:
-                visit(sg, path_id)
-
-    visit(workflow, "")
-
-    return {
-        "node_count": len(out_nodes),
-        "link_count": total_links,
-        "orphans": orphans,
-        "nodes": out_nodes,
-    }
-
-
-def _detect_format(wf: Any) -> tuple[str, int]:
-    if isinstance(wf, dict) and isinstance(wf.get("nodes"), list) and "links" in wf:
-        return "ui", len(wf["nodes"])
-    if isinstance(wf, dict) and wf and all(
-        isinstance(v, dict) and "class_type" in v for v in wf.values()
-    ):
-        return "api", len(wf)
-    return "unknown", 0
-
-
-def _flatten_inputs(spec: dict[str, Any]) -> list[tuple[str, Any]]:
-    out: list[tuple[str, Any]] = []
-    for section in ("required", "optional"):
-        for n, v in (spec.get(section) or {}).items():
-            out.append((n, v[0] if isinstance(v, (list, tuple)) and v else v))
-    return out
-
-
-def _socket_type(t: Any) -> str:
-    if isinstance(t, str):
-        return t.upper()
-    if isinstance(t, list):
-        return "ENUM"
-    return str(t).upper()
-
-
-# ---------------------------------------------------------------------------
-# Refactor helpers (Dec 2025)
-# ---------------------------------------------------------------------------
-
-
-def _basename_no_ext(s: str) -> str:
-    """Strip directory and extension. 'foo/bar.safetensors' → 'bar'."""
-    base = s.rsplit("/", 1)[-1]
-    return base.rsplit(".", 1)[0] if "." in base else base
-
-
-def _outputs_to_files(history_entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """Flatten a history entry's outputs dict to a list of {node_id, kind, ...file fields}.
-    `history_entry` is the per-prompt dict with shape {prompt, outputs, status, ...}."""
-    outputs = (history_entry or {}).get("outputs") or {}
-    files: list[dict[str, Any]] = []
-    for node_id, node_out in outputs.items():
-        if not isinstance(node_out, dict):
-            continue
-        for kind in ("images", "gifs", "audio", "videos"):
-            for entry in node_out.get(kind, []) or []:
-                if isinstance(entry, dict):
-                    files.append({"node_id": node_id, "kind": kind, **entry})
-    return files
-
-
-async def _workflow_from_tab(
-    tab_id: str = "", want_api: bool = False
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
-    """Pull workflow from the bridge for a tab. Returns (workflow, state, error_response).
-    Exactly one of workflow/error_response is non-None on success/failure."""
-    state = await comfy.bridge_state(tab_id=tab_id or None)
-    if state.get("error"):
-        return None, state, state
-    wf = state.get("api_workflow" if want_api else "workflow")
-    if wf is None:
-        fmt_label = "api-format" if want_api else "ui-format"
-        return None, state, {
-            "error": f"no {fmt_label} workflow available",
-            "hint": "is the bridge installed and a browser tab open with a valid graph?",
-            "tab_count": state.get("tab_count", 0),
-        }
-    return wf, state, None
-
-
-async def _queue_and_enrich(
-    workflow: dict[str, Any], client_id: str | None = None
-) -> dict[str, Any]:
-    """Submit a workflow and shape the response uniformly: {ok, prompt_id?, error?, node_errors?}.
-    On validation failure, node_errors are enriched with valid_values from /object_info."""
-    status, body = await comfy.queue(workflow, client_id=client_id)
-    if status == 200:
-        return {"ok": True, **body}
-    if "node_errors" in body:
-        body = {**body, "node_errors": await _enrich_node_errors(body["node_errors"] or {}, workflow)}
-    return {"ok": False, **body}
-
-
-def _summarize_workflow_body(wf: dict[str, Any], summary_only: bool) -> dict[str, Any]:
-    """Build the format/node_count/top_types/notes/refs body shared by both
-    describe_workflow branches (tab and file). Subgraph-aware via _all_nodes."""
-    fmt, count = _detect_format(wf)
-    if fmt == "ui":
-        count = sum(1 for _ in _all_nodes(wf))
-    out: dict[str, Any] = {"format": fmt, "node_count": count, "top_types": _top_node_types(wf, n=8)}
-    notes = _extract_notes(wf)
-    if notes:
-        out["notes_in_canvas"] = (
-            [n["text"][:200] for n in notes[:3]] if summary_only else notes
-        )
-    refs = _extract_model_refs(wf)
-    if refs:
-        out["model_references"] = (
-            [{"node_type": r["node_type"], "value": r["value"]} for r in refs]
-            if summary_only else refs
-        )
-    if summary_only:
-        out.pop("node_count", None)
-    return out
 
 
 def main() -> None:
