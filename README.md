@@ -46,10 +46,10 @@ This installs the `comfyui-mcp` console script (a stdio MCP server entry point).
 
 ### 2. The bridge custom_node (optional, for live co-edit)
 
-The bridge lives at `<ComfyUI>/custom_nodes/comfyui-mcp-bridge/`. Copy or symlink it there:
+The bridge lives at `<ComfyUI>/custom_nodes/comfyui-mcp-bridge/`. A vendored copy ships in this repo under `custom_nodes/comfyui-mcp-bridge/` — symlink it into your ComfyUI install:
 
 ```bash
-ln -s /path/to/comfyui-mcp-bridge \
+ln -s /path/to/comfyui-mcp/custom_nodes/comfyui-mcp-bridge \
       /path/to/ComfyUI/custom_nodes/comfyui-mcp-bridge
 ```
 
