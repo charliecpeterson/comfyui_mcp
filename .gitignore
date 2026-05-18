@@ -28,3 +28,6 @@ ENV/
 # Local logs / scratch
 *.log
 .scratch/
+
+# Claude Code per-user local settings (the shared .claude/settings.json is still tracked)
+.claude/settings.local.json
