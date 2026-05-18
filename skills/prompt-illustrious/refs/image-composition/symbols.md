@@ -1,0 +1,289 @@
+# Symbols
+
+- `heart` (831,947 posts) — // ♥ ♡ (see also [b]Playing Card[/b])
+- `sweatdrop` (306,141 posts)
+- `flying_sweatdrops` (119,377 posts)
+- `?` (98,129 posts)
+- `cross` (97,563 posts) — h4#cross.  symbols
+- `anger_vein` (74,771 posts)
+- `...` (73,047 posts)
+- `spoken_heart` (72,327 posts)
+- `musical_note` (71,503 posts)
+- `crescent` (69,449 posts) — // ☾
+- `^^^` (63,896 posts)
+- `!` (52,986 posts)
+- `spoken_ellipsis` (50,583 posts)
+- `notice_lines` (48,397 posts)
+- `!?` (35,876 posts)
+- `spoken_question_mark` (28,932 posts)
+- `+++` (26,559 posts)
+- `eighth_note` (25,912 posts) — // ♪
+- `squiggle` (22,574 posts)
+- `spoken_exclamation_mark` (19,220 posts)
+- `puff_of_air` (18,204 posts)
+- `squeans` (15,476 posts)
+- `playing_card` (15,396 posts) — h4#play_card.
+- `spoken_musical_note` (12,311 posts)
+- `yin_yang` (11,786 posts) — // ☯
+- `orb` (11,148 posts)
+- `beamed_eighth_notes` (10,865 posts) — // ♫
+- `iron_cross` (10,701 posts)
+- `spoken_blush` (10,500 posts)
+- `barcode` (10,213 posts)
+- `lightning_bolt_symbol` (9,972 posts) — // ⚡
+- `triangle` (8,940 posts) — // ▲
+- `road_sign` (8,350 posts) — h4#road_signs. s
+- `spoken_squiggle` (7,655 posts)
+- `pentagram` (7,637 posts) — (5 points) // ⛥
+- `spoken_interrobang` (7,405 posts)
+- `spoken_anger_vein` (7,312 posts)
+- `circle` (7,175 posts) — // ○
+- `command_spell` (7,135 posts)
+- `latin_cross` (6,474 posts) — // †
+- `treble_clef` (6,247 posts) — // 𝄞
+- `sun_symbol` (5,656 posts)
+- `musical_staff` (4,812 posts) — // 𝄚𝄚𝄚𝄚𝄚
+- `skull_and_crossbones` (4,697 posts) — // ☠
+- `quarter_note` (4,570 posts) — // ♩
+- `japari_symbol` (4,555 posts)
+- `inverted_cross` (4,160 posts)
+- `cube` (4,012 posts)
+- `hexagram` (3,958 posts) — (6 points)
+- `mars_symbol` (3,952 posts) — (Male symbol) // ♂
+- `battery_indicator` (3,946 posts)
+- `smiley_face` (3,908 posts)
+- `x_(symbol)` (3,696 posts)
+- `spoken_sweatdrop` (3,624 posts)
+- `power_symbol` (3,576 posts)
+- `beamed_sixteenth_notes` (3,512 posts) — // ♬
+- `red_cross` (3,322 posts)
+- `qr_code` (3,313 posts)
+- `konohagakure_symbol` (3,224 posts)
+- `venus_symbol` (3,106 posts) — (Female symbol) // ♀
+- `broken_heart` (3,062 posts)
+- `hammer_and_sickle` (2,579 posts) — // ☭
+- `ankh` (2,484 posts) — // ☥
+- `runes` (2,407 posts)
+- `arrow_through_heart` (2,387 posts)
+- `hexagon` (2,281 posts)
+- `androgyne_symbol` (2,005 posts) — // ⚨ ⚦ ⚩
+- `warning_sign` (2,002 posts) — // ⚠️
+- `bus_stop` (1,944 posts)
+- `bass_clef` (1,875 posts) — // 𝄢
+- `oda_uri` (1,789 posts)
+- `infinity_symbol` (1,762 posts) — // ∞
+- `star_of_david` (1,669 posts) — // ✡
+- `peace_symbol` (1,577 posts) — // ☮
+- `kikumon` (1,490 posts)
+- `zodiac` (1,427 posts) — // ♈♉♊♋♌♍♎♏♐♑♒♓
+- `survey_corps_(emblem)` (1,422 posts)
+- `radiation_symbol` (1,386 posts) — // ☢
+- `jolly_roger` (1,355 posts)
+- `swastika` (1,311 posts) — // 卐 卍
+- `st._gloriana's_(emblem)` (1,300 posts)
+- `trigram` (1,247 posts)
+- `red_star` (1,219 posts)
+- `square` (1,180 posts)
+- `dollar_sign` (1,178 posts) — / $
+- `fleur-de-lis` (1,145 posts) — // ⚜
+- `sixteenth_note` (1,100 posts) — // 𝅘𝅥𝅯
+- `comedic_sweatdrop` (1,016 posts)
+- `rhine_lab_logo` (957 posts)
+- `shout_lines` (919 posts)
+- `spoken_x` (916 posts)
+- `stop_sign` (905 posts)
+- `training_corps_(emblem)` (877 posts)
+- `greek_cross` (857 posts) — // +
+- `half_note` (843 posts) — // 𝅗𝅥
+- `ooarai_(emblem)` (820 posts)
+- `plus_sign` (788 posts) — // +
+- `no_symbol` (778 posts) — // ⃠
+- `yen_sign` (735 posts) — / ¥
+- `sakura_empire_(emblem)` (692 posts)
+- `male-female_symbol` (654 posts) — // ⚥
+- `reichsadler` (619 posts)
+- `iron_blood_(emblem)` (619 posts)
+- `star_of_life` (612 posts)
+- `sharp_sign` (588 posts) — // ♯
+- `no_entry_sign` (588 posts) — // ⛔
+- `spoken_star` (587 posts)
+- `pravda_(emblem)` (572 posts)
+- `playing_card_theme` (560 posts)
+- `eagle_union_(emblem)` (541 posts)
+- `small_stellated_dodecahedron` (520 posts)
+- `kuromorimine_(emblem)` (502 posts)
+- `rectangle` (481 posts)
+- `penguin_logistics_logo` (480 posts)
+- `recycling_symbol` (466 posts) — // ♻
+- `stellated_octahedron` (456 posts)
+- `seven-segment_display` (450 posts)
+- `no_smoking` (450 posts) — // 🚭
+- `octagram` (438 posts) — (8 points) // ✷
+- `flat_sign` (407 posts) — // ♭
+- `wi-fi_symbol` (405 posts)
+- `japanese_tankery_league_(emblem)` (389 posts)
+- `celtic_cross` (385 posts) — // 🕈
+- `interlocked_mars_and_venus_symbols` (370 posts) — // ⚤
+- `totenkopf` (369 posts)
+- `anzio_(emblem)` (365 posts)
+- `ouroboros` (363 posts)
+- `saunders_(emblem)` (353 posts)
+- `biohazard_symbol` (348 posts) — // ☣
+- `sanada_clan_(emblem)` (338 posts)
+- `good_fortune_symbol` (334 posts) — // 福
+- `inverted_pentagram` (330 posts) — (5 points) // ⛧
+- `bagua` (325 posts)
+- `keizoku_(emblem)` (322 posts)
+- `omega_symbol` (317 posts) — // Ω
+- `selection_university_(emblem)` (314 posts)
+- `straw_hats_jolly_roger` (310 posts)
+- `quarter_rest` (305 posts) — // 𝄽
+- `dodecagram` (303 posts) — (12 points)
+- `no_parking_sign` (292 posts)
+- `eighth_rest` (286 posts) — // 𝄾
+- `balkenkreuz` (281 posts)
+- `uchiha_symbol` (281 posts)
+- `tryzub` (279 posts)
+- `jupiter_symbol` (275 posts) — // ♃
+- `onsen_symbol` (260 posts) — // ♨
+- `restroom_symbol` (255 posts)
+- `mercury_symbol` (246 posts) — // ☿
+- `ars_goetia` (238 posts)
+- `arrow_cross` (235 posts)
+- `speed_limit_sign` (226 posts)
+- `sunagakure_symbol` (208 posts)
+- `compass_rose` (202 posts) — // 🟇
+- `mobius_strip` (201 posts)
+- `star_of_lakshmi` (198 posts)
+- `star_and_crescent` (196 posts) — // ☪
+- `segment_display` (193 posts)
+- `whole_note` (176 posts) — // 𝅝
+- `ursus_logo` (172 posts)
+- `dotted_quarter_note` (171 posts)
+- `interlocked_venus_symbols` (169 posts) — // ⚢
+- `z_(russian_symbol)` (165 posts)
+- `kirigakure_symbol` (164 posts)
+- `saturn_symbol` (161 posts) — // ♄
+- `parental_advisory` (160 posts)
+- `chi-hatan_(emblem)` (158 posts)
+- `neptune_symbol` (157 posts) — // ♆
+- `flamel_symbol` (157 posts)
+- `cross_patty` (153 posts) — // ✠
+- `sardegna_empire_(emblem)` (150 posts)
+- `natural_sign` (147 posts) — // ♮
+- `caduceus` (147 posts) — // ☤
+- `northern_parliament_(emblem)` (144 posts)
+- `uranus_symbol` (137 posts) — // ♅
+- `wheel_of_dharma` (135 posts) — // ☸️
+- `vichya_dominion_(emblem)` (130 posts)
+- `siegrunen` (123 posts) — // ᛋᛋ
+- `signal_bar` (120 posts)
+- `iwagakure_symbol` (114 posts)
+- `minus_sign` (112 posts) — //
+- `pi_(math)` (112 posts) — // π
+- `one_way_sign` (112 posts)
+- `iris_libre_(emblem)` (110 posts)
+- `heaven_(kanji)` (106 posts) — // 天
+- `rod_of_asclepius` (104 posts) — // ⚕️
+- `dao_fu` (101 posts) — // reversed 福
+- `military_police_brigade_(emblem)` (101 posts)
+- `pedestrian_crossing_sign` (99 posts)
+- `prism` (96 posts)
+- `two-legged_horse_(kanji)` (96 posts)
+- `dotted_half_note` (92 posts)
+- `pluto_symbol` (92 posts) — // ♇
+- `lungmen_logo` (91 posts)
+- `octagon` (88 posts)
+- `equal_sign` (87 posts) — // =
+- `amegakure_symbol` (86 posts)
+- `dragon_empery_(emblem)` (84 posts)
+- `blazblue_insignia` (84 posts)
+- `anarchy_symbol` (83 posts) — // Ⓐ
+- `sakamoto_clan_(emblem)` (82 posts)
+- `tetrahedron` (79 posts)
+- `maltese_cross` (79 posts)
+- `orthodox_cross` (77 posts) — // ☦︎
+- `pedestrians_only_sign` (73 posts)
+- `501st_joint_fighter_wing_(emblem)` (71 posts)
+- `interlocked_mars_symbols` (68 posts) — // ⚣
+- `crucifix` (65 posts)
+- `time_signature` (63 posts)
+- `bicycles_only_sign` (63 posts)
+- `fragile_symbol` (62 posts)
+- `sixteenth_rest` (59 posts) — // 𝄿
+- `two-barred_cross` (59 posts) — // ☨
+- `icosahedron` (57 posts)
+- `road_closed_to_vehicles_sign` (55 posts)
+- `thirty-second_note` (52 posts)
+- `no_stopping_sign` (52 posts)
+- `dotted_eighth_note` (50 posts)
+- `half_rest` (49 posts) — // 𝄼
+- `beamed_thirty-second_notes` (49 posts)
+- `whole_rest` (48 posts) — // 𝄻
+- `double_happiness` (47 posts) — // 囍
+- `digital_rain` (47 posts)
+- `no_u-turn_sign` (47 posts)
+- `cross_fleury` (44 posts)
+- `flammable_symbol` (39 posts)
+- `cross_moline` (38 posts)
+- `502nd_joint_fighter_wing_(emblem)` (37 posts)
+- `wolfsangel` (36 posts)
+- `garrison_regiment_(emblem)` (35 posts)
+- `motor_vehicles_only_sign` (34 posts)
+- `wheelchair_sign` (33 posts) — // ♿
+- `parking_permissive_sign` (33 posts)
+- `octahedron` (31 posts)
+- `heptagram` (29 posts) — (7 points)
+- `dodecahedron` (29 posts)
+- `cross_patonce` (29 posts)
+- `cross_potent` (28 posts) — // ☩
+- `otogakure_symbol` (28 posts)
+- `school_crossing_sign` (27 posts)
+- `decagram` (26 posts) — (10 points)
+- `cross_bottony` (26 posts)
+- `sun_cross` (26 posts) — // 🜨
+- `turn_left_sign` (26 posts)
+- `euro_sign` (21 posts) — / €
+- `cross_fitchy` (21 posts)
+- `true_rune` (21 posts)
+- `railroad_crossing_ahead_sign` (20 posts)
+- `turn_right_sign` (20 posts)
+- `xillia_symbol` (20 posts)
+- `504th_joint_fighter_wing_(emblem)` (19 posts)
+- `division_sign` (17 posts) — // ÷
+- `won_sign` (17 posts) — / ₩
+- `no_pedestrian_crossing_sign` (17 posts)
+- `transgender_symbol` (15 posts) — // ⚧
+- `pound_sign` (13 posts) — / £ / ₤
+- `straight_or_left_turn_sign` (13 posts)
+- `neutered_symbol` (12 posts)
+- `straight_or_right_turn_sign` (11 posts)
+- `heptagon` (10 posts)
+- `dotted_sixteenth_note` (9 posts)
+- `beamed_sixty-fourth_notes` (9 posts) — (two or more 64th notes)
+- `grace_note` (9 posts)
+- `506th_joint_fighter_wing_(emblem)` (9 posts)
+- `cross_crosslet` (8 posts)
+- `falling_rocks_sign` (8 posts)
+- `505th_joint_fighter_wing_(emblem)` (8 posts)
+- `klein_bottle` (7 posts)
+- `symbol_ba-90` (7 posts)
+- `thirty-second_rest` (7 posts)
+- `amestris_symbol` (7 posts)
+- `enneagram` (6 posts) — (9 points)
+- `great_dodecahedron` (6 posts)
+- `sixty-fourth_note` (6 posts)
+- `shinigami_daikou_symbol` (6 posts)
+- `ghost_note` (5 posts) — (a note of any length with no discernable pitch)
+- `sigil_of_lucifer` (5 posts)
+- `ruble_sign` (4 posts) — / ₽
+- `507th_joint_fighter_wing_(emblem)` (4 posts)
+- `508th_joint_fighter_wing_(emblem)` (4 posts)
+- `503rd_joint_fighter_wing_(emblem)` (3 posts)
+- `franc_sign` (2 posts) — / ₣
+- `road_narrows_sign` (2 posts)
+- `dotted_thirty-second_note` (1 posts)
+- `indian_rupee_sign` (1 posts) — / ₹
+- `shihouin_symbol` (1 posts)
+- `tag_groups` — [See .]
+- `druze_star`

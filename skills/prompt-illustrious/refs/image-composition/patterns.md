@@ -1,0 +1,39 @@
+# Patterns
+
+- `floral_print` (120,336 posts)
+- `polka_dot` (78,793 posts)
+- `egasumi` (6,842 posts)
+- `plaid` (5,386 posts)
+- `cross_print` (4,012 posts)
+- `seigaiha` (3,495 posts)
+- `meandros` (3,129 posts) — (also a Greek pattern)
+- `yagasuri` (3,065 posts)
+- `sakuramon` (2,216 posts)
+- `asa_no_ha_(pattern)` (2,126 posts)
+- `houndstooth` (1,806 posts)
+- `kikkoumon` (1,800 posts)
+- `kikumon` (1,490 posts)
+- `fleur-de-lis` (1,145 posts)
+- `sayagata` (1,111 posts)
+- `patterned` (1,110 posts)
+- `shippou_(pattern)` (1,048 posts)
+- `xiangyun` (1,023 posts) — (whorled clouds)
+- `kanoko_(pattern)` (590 posts)
+- `grid_print` (423 posts)
+- `uroko_(pattern)` (387 posts)
+- `karakusa_(pattern)` (291 posts)
+- `shima_(pattern)` (236 posts)
+- `goshoguruma` (204 posts)
+- `genjiguruma` (149 posts)
+- `kagome_(pattern)` (100 posts)
+- `paisley` (94 posts)
+- `igeta_(pattern)` (85 posts)
+- `kojitsunagi_(pattern)` (82 posts)
+- `double_happiness` (47 posts)
+- `shou_(symbol)` (40 posts) — (longevity)
+- `tatewaku` (5 posts)
+- `tag_groups` — [See .]
+- `argyle`
+- `checkered`
+- `gingham`
+- `striped`

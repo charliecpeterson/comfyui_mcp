@@ -1,0 +1,199 @@
+# Hair Styles
+
+- `long_hair` (5,792,134 posts) — !post #10351427:  - hair that goes from the shoulders to the waist
+- `short_hair` (2,942,614 posts) — !post #6290364:   - hair that does not go past the shoulders
+- `very_long_hair` (1,316,948 posts) — !post #2336560:  - hair that goes from the waist to the feet
+- `medium_hair` (579,407 posts) — !post #4402781:  - hair that is (around) shoulder length
+- `bob_cut` (131,049 posts) — !post #10529457
+- `short_hair_with_long_locks` (63,493 posts) — !post #4243462
+- `very_short_hair` (34,070 posts) — !post #5397131:   - hair that does not go past the jaw
+- `hime_cut` (29,869 posts) — !post #7467939
+- `absurdly_long_hair` (28,846 posts) — !post #9658670:  - hair that goes past the feet
+- `bald` (21,708 posts) — !post #2235813:  (if female, ) - no hair at all
+- `undercut` (21,414 posts) — !post #7294601
+- `big_hair` (13,003 posts) — !post #4568567:  - hair that is notably voluminous or thick
+- `inverted_bob` (7,526 posts) — !post #8446872:  ()
+- `wolf_cut` (5,939 posts) — !post #7351057
+- `buzz_cut` (4,307 posts) — !post #8862785
+- `bowl_cut` (4,252 posts) — !post #4261279
+- `jellyfish_cut` (1,938 posts) — !post #7525572
+- `mullet` (1,901 posts) — !post #7352173
+- `balding` (1,670 posts) — !post #5860667:  - mostly bald, but has sparse amounts of hair
+- `pixie_cut` (1,549 posts) — !post #9715668
+- `flattop` (964 posts) — !post #5319588
+- `bald_female` (527 posts) — !post #2235813:  (if female, ) - no hair at all
+- `crew_cut` (329 posts) — !post #10316399
+- `tag_groups` — [See .]
+
+## Braids
+
+- `twin_braids` (234,349 posts) — !post #7605695
+- `single_braid` (171,421 posts) — !post #5463225
+- `side_braid` (79,155 posts) — !post #7899026
+- `crown_braid` (34,337 posts) — !post #6440710
+- `half_up_braid` (34,193 posts) — !post #3190742
+- `low_twin_braids` (21,324 posts) — !post #8985653
+- `braided_bangs` (16,558 posts) — !post #3003357
+- `braided_hair_rings` (13,082 posts) — !post #9428066
+- `low-braided_long_hair` (10,220 posts) — !post #3274500
+- `dreadlocks` (5,132 posts) — !post #7897641
+- `multiple_braids` (4,173 posts) — !post #7569581
+- `half_up_half_down_braid` (2,767 posts) — !post #7237249
+- `half_crown_braid` (1,626 posts) — !post #9326965
+- `tri_braids` (1,182 posts) — !post #7358243
+- `quad_braids` (1,001 posts) — !post #7594980
+- `cornrows` (777 posts) — !post #9422436
+- `front_braid` (199 posts) — !post #998626
+- `box_braids` (62 posts) — !post #9165941
+- `rope_braid` (51 posts) — !post #7542352
+- `braided_dreadlocks` (35 posts) — !post #9460194
+
+## Hair buns
+
+- `double_bun` (167,846 posts) — !post #9885408
+- `single_hair_bun` (88,470 posts) — !post #339326
+- `hair_rings` (63,191 posts) — !post #8813502
+- `cone_hair_bun` (19,934 posts) — !post #5981869
+- `braided_bun` (15,708 posts) — !post #1771571
+- `bun_with_braided_base` (9,146 posts) — !post #6340
+- `single_hair_ring` (6,552 posts) — !post #2618350
+- `donut_hair_bun` (3,392 posts) — !post #8191455
+- `nihongami` (1,354 posts) — !asset #22075057:  ()
+- `feixianji_(hairstyle)` (922 posts) — !post #7863326
+- `heart_hair_bun` (613 posts) — !post #10309994
+- `katsuyamamage` (286 posts) — !asset #22075057:  ()
+- `triple_bun` (132 posts) — !post #1331886
+- `quad_hair_rings` (109 posts) — !post #7355712
+- `bantu_knots` (35 posts) — !post #7911999
+- `tri_hair_rings` (22 posts) — !post #7974711
+
+## Ponytails
+
+- `hair_between_eyes` (1,646,928 posts) — !post #7986694
+- `twintails` (1,162,738 posts) — !post #7912319
+- `ahoge` (899,785 posts) — !post #5691392
+- `sidelocks` (867,906 posts) — !post #5756963
+- `blunt_bangs` (403,138 posts) — !post #6500971
+- `hair_over_one_eye` (341,669 posts) — !post #7967265
+- `parted_bangs` (288,361 posts) — !post #200120
+- `two_side_up` (234,719 posts) — !post #7633494
+- `side_ponytail` (225,457 posts) — !post #6566860
+- `hair_intakes` (207,928 posts) — !post #7216567
+- `swept_bangs` (155,168 posts) — !post #8632542
+- `low_twintails` (153,535 posts) — !post #7663560
+- `wavy_hair` (140,460 posts) — !post #7124937
+- `one_side_up` (139,637 posts) — !post #6511326
+- `drill_hair` (121,986 posts) — !post #7829122
+- `antenna_hair` (117,056 posts) — !post #9411251
+- `high_ponytail` (115,758 posts) — !post #2603996
+- `spiked_hair` (99,278 posts) — !post #9416878
+- `crossed_bangs` (96,091 posts) — !post #7381089
+- `straight_hair` (95,012 posts) — !post #7401422
+- `messy_hair` (85,841 posts) — !post #9986352
+- `double-parted_bangs` (83,294 posts) — !post #7540287
+- `short_twintails` (81,725 posts) — !post #4749051
+- `low_ponytail` (75,912 posts) — !post #4457837
+- `twin_drills` (66,602 posts) — !post #8272899
+- `low-tied_long_hair` (55,562 posts) — !post #3335919
+- `half_updo` (54,851 posts) — !post #4827228
+- `hair_flaps` (53,907 posts) — !post #1542014
+- `short_ponytail` (46,050 posts) — !post #3988929
+- `curly_hair` (44,809 posts) — !post #6966672
+- `long_bangs` (44,710 posts) — !post #7989717
+- `asymmetrical_bangs` (42,966 posts) — !post #4575471
+- `curtained_hair` (40,490 posts) — !post #7640262
+- `flipped_hair` (39,219 posts) — !post #8045539
+- `hair_over_eyes` (29,300 posts) — !post #4415241
+- `folded_ponytail` (25,335 posts) — !post #1597804
+- `hair_slicked_back` (21,052 posts) — !post #7801781
+- `huge_ahoge` (21,019 posts) — !post #8957697
+- `single_sidelock` (16,813 posts) — !post #10271471
+- `heart_ahoge` (16,549 posts) — !post #4156780
+- `topknot` (14,507 posts) — !post #3734141
+- `single_hair_intake` (12,102 posts) — !post #10499197
+- `hair_pulled_back` (11,155 posts) — !post #9024552
+- `bow-shaped_hair` (10,734 posts) — !post #5810739
+- `center-flap_bangs` (10,610 posts) — !post #7997644
+- `parted_hair` (10,083 posts) — !post #7166919
+- `multi-tied_hair` (9,535 posts) — !post #7165613
+- `diagonal_bangs` (9,268 posts) — !post #3043948
+- `front_ponytail` (9,085 posts) — !post #1378349
+- `choppy_bangs` (8,665 posts) — !post #154015
+- `pointy_hair` (8,568 posts) — !post #1896921
+- `drill_sidelocks` (8,364 posts) — !post #6998787
+- `ringlets` (8,178 posts) — !post #2584153
+- `wispy_bangs` (8,041 posts) — !post #5735551
+- `quad_tails` (7,359 posts) — !post #10155533
+- `bangs_pinned_back` (7,137 posts) — !post #7663078
+- `short_bangs` (6,862 posts) — !post #7661261
+- `low-tied_sidelocks` (6,766 posts) — !post #6902110
+- `high_side_ponytail` (6,624 posts) — !post #2552101
+- `pompadour` (5,862 posts) — !post #10106496
+- `mohawk` (5,381 posts) — !post #9747146
+- `arched_bangs` (5,302 posts) — !post #4382765
+- `afro` (4,283 posts) — !post #10437498
+- `fluffy_hair` (4,172 posts) — !post #9928016
+- `asymmetrical_sidelocks` (3,614 posts) — !post #5871244
+- `colored_bangs` (3,474 posts) — !post #7934105
+- `split_ponytail` (3,056 posts) — !post #8132257
+- `tri_tails` (2,773 posts) — !post #5160017
+- `low_side_ponytail` (2,487 posts) — !post #7509006
+- `lone_nape_hair` (2,363 posts) — !post #5779642
+- `short_side_ponytail` (2,205 posts) — !post #6774705
+- `fanged_bangs` (2,077 posts) — !post #7950336
+- `kishimen_hair` (1,928 posts) — !post #8684244
+- `uneven_twintails` (1,733 posts) — !post #7534944
+- `sidelocks_tied_back` (1,461 posts) — !post #2737276
+- `nihongami` (1,354 posts) — !post #6063501:  ()
+- `widow's_peak` (1,197 posts) — !post #2193331
+- `shuangyaji` (1,107 posts) — !post #3791615
+- `single_drill` (911 posts) — !post #9007227
+- `quad_drills` (890 posts) — !post #46768
+- `beehive_hairdo` (875 posts) — !post #8339134
+- `heart_antenna_hair` (569 posts) — !post #6671708
+- `flower-shaped_hair` (501 posts) — !post #2874230
+- `quiff` (414 posts) — !post #9179225
+- `mizura` (374 posts) — !post #7149571:  ()
+- `chonmage` (295 posts) — !post #1257361
+- `comb_over` (180 posts) — !post #3540270
+- `tri_drills` (157 posts) — !post #887041
+- `marumage` (98 posts) — !post #7250897:  ()
+- `star-shaped_hair` (83 posts) — !post #8946762
+- `shouten_pegasus_mix_mori` (78 posts) — !post #442230
+- `chasenmage` (62 posts) — !post #5347372
+- `crested_hair` (53 posts) — !post #5060950
+- `huge_afro` (40 posts) — !post #8930265
+- `liangbatou` (40 posts) — !post #7401728
+- `danyaji` (37 posts) — !post #8625139
+- `rabbit_hairstyle` (36 posts) — !post #7699372
+- `quin_tails` (30 posts) — !post #9889271
+- `four_leaf_clover_hairstyle` (20 posts) — !post #9302272
+- `oseledets` (17 posts) — !post #10391890
+- `bow_shimada` (12 posts) — !post #6063501:  ()
+- `karawamage` (8 posts) — !post #3456979:  ()
+- `fukumage` (7 posts) — !post #2092806:  ()
+- `yuiwata` (3 posts) — !asset #22435169:  ()
+- `sangtu` (1 posts) — !post #5110195
+
+## Traditional Chinese
+
+- `double_bun` (167,846 posts) — !post #9885408
+- `alternate_hairstyle` (138,447 posts)
+- `hair_over_shoulder` (74,014 posts)
+- `blunt_ends` (47,375 posts)
+- `hair_down` (41,064 posts)
+- `asymmetrical_hair` (35,830 posts)
+- `hair_up` (15,507 posts)
+- `braided_hair_rings` (13,082 posts) — !post #9428066
+- `convenient_hair` (11,772 posts)
+- `hair_over_breasts` (11,172 posts)
+- `sidecut` (2,757 posts)
+- `hair_in_own_mouth` (2,747 posts)
+- `shuangyaji` (1,107 posts) — !post #7600236
+- `hair_over_one_breast` (976 posts)
+- `hair_scarf` (311 posts)
+- `hair_over_crotch` (290 posts)
+- `yuanbao` (74 posts) — !asset #24212137: [[yuanbao ji (hairstyle)|]] (three buns that create the shape of a )
+- `double_luo_ji` (26 posts) — !post #8754450
+- `hair_bikini` (21 posts)
+- `tag_groups`

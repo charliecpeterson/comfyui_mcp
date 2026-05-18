@@ -1,0 +1,81 @@
+# Lighting
+
+- `sunlight` (98,224 posts)
+- `backlighting` (43,327 posts) — !post #5185860: : Light comes from behind the subject making a luminous contour
+- `light_rays` (31,892 posts) — !post #438675:  ()
+- `underwater` (28,474 posts) — !post #949063:  ()
+- `sunbeam` (12,842 posts) — !post #438675:  ()
+- `sidelighting` (11,673 posts) — !post #5758679: : Light comes from the left or right side
+- `spotlight` (8,570 posts) — !post #5938276: : A cone-shaped light from above on a target
+- `bloom` (5,134 posts) — !post #6970897: : Bright areas that blur with surrounding areas
+- `moonlight` (4,602 posts)
+- `underlighting` (1,185 posts) — !post #7729975: : Light comes from below, typically to create a ominous effect
+- `dim_lighting` (1,041 posts) — !post #7834427: : For dimly lit posts
+- `overlighting` (179 posts) — !post #9706205: : Light comes from above usually making the face and torso shaded in contrast
+- `moonbeam` (66 posts) — !post #3100996:  ()
+
+## Light through gaps
+
+- `tree` (219,111 posts) — !post #1054608: :  seen through the  cast by leaves of a
+- `window` (170,640 posts) — !post #10100307: :  cast by a
+- `shadow` (154,816 posts) — !post #1054608: :  seen through the  cast by leaves of a
+- `sunlight` (98,224 posts) — !post #1054608: :  seen through the  cast by leaves of a
+- `dappled_sunlight` (14,360 posts) — !post #1054608: :  seen through the  cast by leaves of a
+- `window_shadow` (3,897 posts) — !post #10100307: :  cast by a
+- `crack_of_light` (1,012 posts) — !post #3066890: : A small amount of light in a dark scene, usually from opening a door to a dark room
+- `dappled_moonlight` (126 posts) — !post #3225622
+
+## Light through objects
+
+- `day` (430,164 posts)
+- `water` (273,100 posts) — !post #9909986:  ()
+- `night` (159,511 posts)
+- `shadow` (154,816 posts)
+- `fire` (101,164 posts)
+- `moon` (99,379 posts)
+- `sunset` (37,071 posts)
+- `lantern` (36,772 posts)
+- `underwater` (28,474 posts) — !post #4150718:  ()
+- `sun` (27,748 posts)
+- `glass` (24,144 posts) — !post #4900932: : A lens effect inverts the image through a  of
+- `lamp` (21,897 posts)
+- `silhouette` (21,793 posts)
+- `shade` (21,465 posts)
+- `dark` (18,697 posts)
+- `lamppost` (13,473 posts)
+- `rainbow` (12,926 posts) — !post #5527065: : -colored light formed when light passes through a transparent object like a
+- `evening` (11,930 posts)
+- `stage` (8,755 posts) — !post #8495122: : Lights of a
+- `twilight` (8,587 posts)
+- `see-through_silhouette` (7,244 posts)
+- `glowstick` (7,109 posts)
+- `stage_lights` (6,346 posts) — !post #8495122: : Lights of a
+- `embers` (6,289 posts)
+- `ceiling_light` (5,864 posts) — | [tn](post #4418507)[/tn]
+- `dusk` (5,690 posts)
+- `sunrise` (4,803 posts)
+- `darkness` (4,397 posts)
+- `chandelier` (4,120 posts) — | [tn](post #1190295)[/tn]
+- `morning` (4,116 posts)
+- `window_shadow` (3,897 posts)
+- `tree_shade` (3,802 posts)
+- `torch` (3,781 posts)
+- `colored_shadow` (3,734 posts)
+- `caustics` (3,668 posts) — !post #8181198: : Light patterns on a surface formed by light traveling through a transparent material
+- `desk_lamp` (3,579 posts)
+- `flashlight` (2,690 posts)
+- `dawn` (1,627 posts)
+- `muzzle_flash` (1,467 posts) — | [tn] (post #7581880)[/tn]
+- `candlelight` (1,284 posts) — | [tn](post #3782254)[/tn]
+- `refraction` (1,120 posts) — !post #6899388: : Changing the angle of light when it passes through an object
+- `wall_lamp` (1,001 posts)
+- `oil_lamp` (619 posts)
+- `wooden_lantern` (585 posts)
+- `subsurface_scattering` (283 posts) — !post #4151443: : Light visible through a solid object
+- `ultraviolet_light` (254 posts) — | [tn] (post #3308935)[/tn]
+- `glowing_headgear` (223 posts) — | [tn] (post #4609650)[/tn]
+- `floodlights` (192 posts)
+- `flare` (189 posts) — | [tn] (post #7246932)[/tn]
+- `dispersion_(optics)` (117 posts) — !post #5527065: : -colored light formed when light passes through a transparent object like a
+- `prism` (96 posts) — !post #5527065: : -colored light formed when light passes through a transparent object like a
+- `headlight` — | [tn](post #7627947)[/tn]

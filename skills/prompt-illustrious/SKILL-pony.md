@@ -1,23 +1,28 @@
 ---
 name: prompt-illustrious
-description: Craft a danbooru-tag image prompt for Illustrious XL, Pony Diffusion V6 XL, or other SDXL fine-tunes trained on danbooru tags. Use when the user asks for a Pony, Illustrious, or SDXL danbooru-style prompt. Returns positive AND negative prompts.
+description: Craft a danbooru-tag image prompt for Illustrious XL, Pony Diffusion V6 XL, NoobAI, or other SDXL fine-tunes trained on danbooru tags. Use when the user asks for a Pony, Illustrious, NoobAI, or SDXL danbooru-style prompt. Returns positive AND negative prompts.
 ---
 
-# Illustrious / Pony / SDXL Danbooru Tag Skill
+# Illustrious / Pony / NoobAI / SDXL Danbooru Tag Skill
 
 You are a creative director and expert prompt engineer for SDXL fine-tunes trained on danbooru tags (Illustrious XL, Pony Diffusion V6 XL, Hassaku XL, NoobAI, etc.). Take the user's seed idea and TRANSFORM it into a cinematic, visually striking scene using danbooru tag conventions.
 
 ## When to use which target model
 
-The user may specify "Pony" or "Illustrious" or "SDXL". Branch your output:
+The user may specify "Pony" or "Illustrious" or "NoobAI" or "SDXL". Branch your output:
 
 | Target | Quality tags (positive) | Quality tags (negative) |
 |---|---|---|
 | **Pony** | `score_9, score_8_up, score_7_up, score_6_up` at the START | `score_1, score_2, score_3, score_4`, `(worst quality, low quality:1.4)` |
 | **Illustrious** | `masterpiece, newest` at the END | `lowres, worst quality, multiple_views, comic, text, watermark, signature` |
+| **NoobAI** | same as Illustrious (it's Illustrious-based); for furry/anthro content add `anthro` early | same as Illustrious; optionally add `bad_furry, bad_anthro, three_legs, four_arms` |
 | **Generic SDXL** | `masterpiece, best quality` at the END | `(worst quality, low quality:1.4), bad anatomy, lowres, signature, watermark` |
 
-If unsure which the user wants, default to **Illustrious** (broader compatibility) and mention which you chose at the end.
+If unsure which the user wants, default to **Illustrious** (broadest compatibility) and mention which you chose at the end.
+
+## Reference precedence
+
+When choosing tags, prefer tags that appear in `references/danbooru-tags/` over tags you only know from memory. The reference is danbooru's own curated taxonomy, sorted by post count — anything well-represented there is well-represented in the training data. Memory-only tags are fine when nothing in the reference fits, but treat the reference as the first stop, not a fallback.
 
 ## Output requirement
 
@@ -55,9 +60,9 @@ No JSON, no commentary inside the blocks — just the comma-separated tag string
 
 These are the highest-leverage moves for making output not look like default AI. Apply most/all of them — each one fights a different AI tell.
 
-1. **Use a medium or era style tag** (NOT just `source_anime`). This is tell #1. Pick: `watercolor_(medium)`, `graphite_(medium)`, `colored_pencil_(medium)`, `painting_(medium)`, `marker_(medium)`, `pen_(medium)`, `oil_painting_(medium)`, `pastel_(medium)`, `kirigami`, `traditional_media`. Or an era: `retro_artstyle`, `1980s_(style)`, `1990s_(style)`, `2000s_(style)`, `pc-98_(style)`, `anime_screenshot`, `game_cg`. Stack two with weights: `(traditional_media:0.5), watercolor_(medium)`.
+1. **Use a medium or era style tag** (NOT just `source_anime`). This is tell #1. Pick: `watercolor_(medium)`, `graphite_(medium)`, `colored_pencil_(medium)`, `painting_(medium)`, `marker_(medium)`, `pen_(medium)`, `oil_painting_(medium)`, `pastel_(medium)`, `kirigami`, `traditional_media`. Or an era: `retro_artstyle`, `1980s_(style)`, `1990s_(style)`, `2000s_(style)`, `pc-98_(style)`, `anime_screenshot`, `game_cg`. Stack two with weights: `(traditional_media:0.5), watercolor_(medium)`. See `references/danbooru-tags/image-composition/visual-aesthetic.md` for the full set with post counts so you can pick well-trained ones over obscure ones.
 2. **Use a real artist tag** with >100 danbooru posts if you know one. Single biggest stylistic lever — beats any "quality" stack.
-3. **Use simple or border backgrounds** instead of detailed scenes. `simple_background`, `white_background`, `striped_background`, `argyle_background`, `gradient_background`, `ornate_frame`, `lace_border`, `halftone_background`. Or for atmospheric soft: `blurry_background, depth_of_field`. AI defaults to over-detailed interiors; danbooru art does not.
+3. **Use simple or border backgrounds** instead of detailed scenes. `simple_background`, `white_background`, `striped_background`, `argyle_background`, `gradient_background`, `ornate_frame`, `lace_border`, `halftone_background`. Or for atmospheric soft: `blurry_background, depth_of_field`. AI defaults to over-detailed interiors; danbooru art does not. See `references/danbooru-tags/image-composition/backgrounds.md` for the complete set, split into plain backgrounds vs ornate frames vs blurred scenes.
 4. **Pick an unusual but specific camera angle.** Default `straight-on` reads as "AI default". Try: `from_above`, `from_below`, `dutch_angle`, `from_side`, `three-quarter_view`, `isometric`, `fisheye`, `over_the_shoulder`, `vanishing_point`.
 5. **Use specific micro-pose tags, NOT catch-alls.** `dynamic_pose`, `cool_pose`, `epic_pose` collapse to the same trained cliché poses. Stack 2-3 concrete gestures instead:
    - `leaning_against_wall, weight_on_one_leg, hand_on_own_hip, looking_back`
@@ -65,31 +70,7 @@ These are the highest-leverage moves for making output not look like default AI.
    - `crouching, knee_up, hand_on_floor, off-balance`
    - `arms_behind_head, head_tilt, half-closed_eyes, smirk`
 6. **Add asymmetry / imperfection cues** to break the doll-uniform face: `asymmetric_eyes`, `messy_hair`, `freckles`, `mole`, `sweat`, `wind_lift`, `motion_blur`, `light_particles`, `lens_flare`, `chromatic_aberration`.
-7. **For wound / battle-aftermath scenes**, use body-imperfection tags: `blood`, `blood_on_face`, `blood_on_clothes`, `bandage`, `bandaid_on_face`, `bandages`, `bandaged_arm`, `dirty`, `dirty_face`, `dirty_clothes`, `torn_clothes` (in `refs/attire/attire.md`), `scratches`, `scar` (in `refs/sex/bdsm-and-torture.md`), `bruise`. Well-trained on Illustrious for post-battle, hard-fought-fight, or rough scenarios.
-8. **In the negative, exclude render/doll tells:** `smooth_skin, plastic_skin, airbrushed, doll, 3d, render, cgi, symmetric_face, identical_eyes, mannequin, generic_pose, stiff_pose, t-pose, a-pose`.
-
-## Override loaded role/profession labels
-
-Some profession and archetype tags carry strong default-look assumptions on anime-trained models. Even when not stated, Illustrious / NoobAI / Pony default these to narrow distributions:
-
-| Label | Default look |
-|---|---|
-| `office_worker`, `salaryman`, `businessman` | Adult male, suit, glasses |
-| `doctor`, `nurse` | White coat or scrubs in clinical context; `nurse` strongly skews to old-fashioned cap-and-dress stylization |
-| `engineer`, `programmer`, `software_developer` | Casual sweater/hoodie + glasses, indoors, male-leaning |
-| `chef` | Male, white chef's coat, tall hat |
-| `student` | School uniform, teen-presenting |
-| `idol`, `model` | Stylized, young, posed |
-| `maid` | Black dress + white apron + headpiece (extremely strong default) |
-| `witch` | Young woman, pointed hat, black dress |
-
-Override by replacing the loaded label with **role + 2–3 specific traits**, or by adding compensating tags:
-
-- Instead of `engineer` → `1girl, dress_shirt, sleeves_rolled_up, glasses, messy_hair, bags_under_eyes` + scene tags
-- Instead of `doctor` → `1girl, dark-skinned_female, white_coat, stethoscope` (or whatever overrides the default)
-- Instead of `student` → `1boy, gakuran, glasses` (specific uniform tag defeats the teen-girl serafuku default)
-
-Illustrious's strong tag adherence means it follows your defaults faithfully — including the ones you didn't realize you were specifying. See `refs/real-world/jobs.md` for the full job-tag catalogue.
+7. **In the negative, exclude render/doll tells:** `smooth_skin, plastic_skin, airbrushed, doll, 3d, render, cgi, symmetric_face, identical_eyes, mannequin, generic_pose, stiff_pose, t-pose, a-pose`.
 
 ## On the base Illustrious XL model
 
@@ -97,26 +78,46 @@ The base **Illustrious XL 1.x** is consistently weaker than its fine-tunes for p
 
 ## Tag reference
 
-The `refs/` directory holds the full Danbooru tag taxonomy, organized by topic and auto-extracted from Danbooru's tag-group wiki. Browse it when you need to verify a tag exists, find related tags, or discover a tag for a concept you don't have a name for yet. Top-level groups:
+A structured reference of danbooru's official tag-group taxonomy lives in `references/danbooru-tags/`, organized by category. Each file lists tags in the corresponding Danbooru tag group, with the wiki's own subsections preserved, sorted by post count, and (where the wiki provided it) annotated with a short description of what the tag depicts.
 
-- **body/** — face, eyes, hair (color/style), gestures, posture, hands, breasts, ears, skin-color, etc.
-- **attire/** — clothing, headwear, eyewear, legwear, accessories, fashion-style, sleeves, etc.
-- **image-composition/** — backgrounds, lighting, colors, focus, visual aesthetic, year tags, text, symbols, fine-art parody, etc.
-- **real-world/** — jobs, locations, holidays, brand names, people, history.
-- **objects/**, **plants/**, **creatures/**, **games/**, **themes-and-misc/**, **sex/**, **meta/** — the rest.
+**Don't read the whole reference. Open the specific file for the decision you're making.** Use this routing table:
 
-**Verification rule of thumb:**
+| When picking a tag for... | Open this file |
+|---|---|
+| Lighting (rim, dramatic, dappled, etc.) | `references/danbooru-tags/image-composition/lighting.md` |
+| Backgrounds (simple, gradient, scene) | `references/danbooru-tags/image-composition/backgrounds.md` |
+| Color palette / monochrome treatment | `references/danbooru-tags/image-composition/colors.md` |
+| Visual style / medium / era | `references/danbooru-tags/image-composition/visual-aesthetic.md` |
+| Subject count (1girl, 2boys, etc.) | `references/danbooru-tags/image-composition/character-count.md` |
+| Camera framing / focus | `references/danbooru-tags/image-composition/focus-tags.md` |
+| Hair: color | `references/danbooru-tags/body/hair-color.md` |
+| Hair: style and length | `references/danbooru-tags/body/hair-styles.md` |
+| Eyes (color, shape, expression) | `references/danbooru-tags/body/eyes-tags.md` |
+| Face / facial features | `references/danbooru-tags/body/face-tags.md` |
+| Skin tone | `references/danbooru-tags/body/skin-color.md` |
+| Body posture and pose | `references/danbooru-tags/body/posture.md` |
+| Hand gestures | `references/danbooru-tags/body/gestures.md` |
+| Specific body parts (breasts, ass, feet, etc.) | `references/danbooru-tags/body/body-parts.md` and sibling files |
+| Animal features (ears, tails, wings, horns) | `references/danbooru-tags/body/ears-tags.md`, `tail.md`, `wings.md` |
+| Clothing (general) | `references/danbooru-tags/attire/attire.md` |
+| Specific clothing — dress / handwear / headwear / legwear / sleeves | matching file in `attire/` |
+| Eyewear (glasses, sunglasses, etc.) | `references/danbooru-tags/attire/eyewear.md` |
+| Accessories (jewelry, bags, etc.) | `references/danbooru-tags/attire/accessories.md` |
+| Holding objects | `references/danbooru-tags/objects/holding-tags.md` |
+| Action verbs (running, reading, fighting) | `references/danbooru-tags/themes-and-misc/verbs-and-gerunds.md` |
+| Time of day / weather / atmosphere | `references/danbooru-tags/image-composition/lighting.md` (time-of-day subsection), `themes-and-misc/water.md`, `fire.md` |
+| Locations / settings | `references/danbooru-tags/real-world/locations.md` |
+| NSFW: sex acts and positions | `references/danbooru-tags/sex/sex-acts.md`, `sexual-positions.md` |
+| NSFW: attire | `references/danbooru-tags/attire/sexual-attire.md`, `bra.md`, `panties.md`, `nudity.md` |
+| Year/era modifier | `references/danbooru-tags/image-composition/year-tags.md` |
 
-- Tags in `refs/` are canonical Danbooru taxonomy and well-trained on Illustrious / NoobAI / Hassaku / Pony.
-- Tags not in `refs/` may still work if they follow Danbooru conventions and you're confident the model knows them (e.g. character tags below the wiki cutoff).
-- **Important exception** — these quality / era / score tags are *model fine-tune conventions*, NOT raw Danbooru tags, and you will NOT find them in `refs/`:
-  - **Pony scores:** `score_9, score_8_up, score_7_up, score_6_up` (positive); `score_1, score_2, score_3, score_4` (negative)
-  - **Illustrious year modifiers:** `oldest` (~2017), `old` (~2019), `modern` (~2020), `recent` (~2022), `newest` (~2023)
-  - **Generic SDXL quality:** `masterpiece, best_quality` (positive); `worst_quality, low_quality, lowres` (negative — though `lowres` is also a canonical Danbooru metatag)
+For anything not on this table, `references/danbooru-tags/README.md` is the full index.
 
-  These are real and load-bearing for the fine-tunes that trained them; just don't try to verify them against `refs/`.
+**Each file's structure:** the wiki's own subsections are preserved as `##` headers, and within each subsection tags are listed in post-count-descending order with the wiki's short description (when available). Higher post counts = better-trained tags = more reliable rendering. Roughly: 100k+ posts is rock-solid, 10k+ is reliable, 1k+ usually works, under 100 is unreliable.
 
-**Tag format:** lowercase_with_underscores, comma-separated. Underscores are usually optional but match training data.
+**Tag format:** all tags in the reference are lowercase with underscores, matching danbooru's canonical training-data form. Either underscores or spaces work in A1111/ComfyUI — underscores are safer.
+
+**When a tag isn't in the reference:** the reference covers groups, not every tag on danbooru. If you know a tag exists and is well-trained (a major character, a common artist name, a standard concept), use it. If you're unsure, prefer a related tag that *is* in the reference.
 
 ## CASE / BASE structure (organize tags with BREAK)
 
@@ -138,6 +139,15 @@ Example:
 ```
 1girl, solo, from_below, dynamic_pose, ..., masterpiece, newest
 ```
+
+## Pose construction reference
+
+When building a pose, work from two files:
+
+- `references/danbooru-tags/body/posture.md` — body-level posture tags (leaning, kneeling, contrapposto, etc.)
+- `references/danbooru-tags/body/gestures.md` — hand and arm gestures (peace_sign, hand_on_hip, pointing, etc.)
+
+Pick 1 posture tag + 1–2 gesture tags + an expression tag. This combination produces specific, readable poses without falling back to `dynamic_pose` catch-alls.
 
 ## Style & medium tags — MANDATORY (pick 1-2, place EARLY)
 
@@ -171,6 +181,8 @@ Stack two with weights for blend: `(traditional_media:0.5), watercolor_(medium)`
 - **Texture**: `straight_hair`, `wavy_hair`, `curly_hair`, `messy_hair`
 - **Style/bangs**: `ponytail`, `high_ponytail`, `twintails`, `single_braid`, `bun`, `blunt_bangs`, `side_bangs`, `hair_over_one_eye`
 
+The full per-component tag lists (with post counts) are in `references/danbooru-tags/body/hair-color.md` and `hair-styles.md`. When picking a hair-color tag, check the description — danbooru notes overlap zones ("aqua hair may overlap with blue and green") that help you choose precisely.
+
 ## Lighting — mix 2-3 types ALWAYS
 
 - **Rim/edge**: `rim_lighting`, `backlighting` — cinematic, separates subject from BG
@@ -180,6 +192,8 @@ Stack two with weights for blend: `(traditional_media:0.5), watercolor_(medium)`
 - **Time**: `sunset`, `dawn`, `dusk`, `moonlight`, `golden_hour`
 
 Example combo: `rim_lighting, dappled_sunlight, golden_hour`
+
+Full lighting taxonomy with post counts and one-line descriptions is in `references/danbooru-tags/image-composition/lighting.md`. The wiki splits lighting into Directional / Types / Time of day / Light sources / Misc / Absence — use the directional and types subsections for the look, the time-of-day subsection for atmosphere.
 
 ## Effects — add 1-2 for cinematic feel
 
@@ -200,23 +214,17 @@ If you DO want a scene, name 1-2 props (`desk, chair, books`) — don't let the 
 
 `grin`, `smirk`, `serious`, `clenched_teeth`, `blush`, `open_mouth`, `clenched_eyes`, `looking_at_viewer`, `looking_back`, `half-closed_eyes`, `:d`, `:p`
 
-## Canonical tag forms — common form errors
+## NSFW handling
 
-Don't lose a generation to a tag-form typo. Common gotchas:
+When the user wants NSFW content:
 
-| Looks reasonable | Actual canonical form |
-|---|---|
-| `sweat_drop` | `sweatdrop` (no underscore) |
-| `rim_lighting` | `backlighting` (rim lighting is a concept; backlighting is the actual trained tag) |
-| `tie` | `necktie` — or color-prefixed: `red_necktie`, `black_necktie`, `blue_necktie` |
-| `shirt` (alone) | works, but specify form (`dress_shirt`, `collared_shirt`, `t-shirt`, `sleeveless_shirt`) and **always** combine with color (`white_shirt`) |
-| `pants` (alone) | works; prefer specific (`black_pants`, `cargo_pants`, `jeans`) |
-| `oil_painting` (alone) | `oil_painting_(medium)` — the `_(medium)` suffix is part of the canonical Danbooru form for art-medium tags (also `watercolor_(medium)`, `pen_(medium)`, `pastel_(medium)`, `marker_(medium)`, `graphite_(medium)`, `colored_pencil_(medium)`) |
-| `school_uniform` (alone) | works, but prefer the specific uniform type: `serafuku` (sailor-style), `gakuran` (boys'), `blazer` (modern), `summer_uniform` |
-| `military_uniform` (alone) | prefer specific: `naval_uniform`, `bdu`, `dress_uniform` |
-| `casual_clothes` | works, but combine with specifics for the look you want |
+- **Pony:** add `rating_explicit` near the front of the positive prompt — without it Pony biases SFW even with explicit body tags.
+- **Illustrious/NoobAI:** add `explicit` (no `rating_` prefix) near the front. Less load-bearing than on Pony but still helpful.
+- Use canonical Danbooru tags from `references/danbooru-tags/sex/` and `references/danbooru-tags/attire/nudity.md`. Don't use euphemisms — the model was trained on the explicit names.
+- Remove NSFW-suppressing tags from the negative prompt (`nude`, `nipples`, `pussy`, etc.). Standard quality/anatomy negatives still apply.
+- For NSFW prompts, include `adult` or `mature_female`/`mature_male` in the positive AND `child, loli, shota, young` in the negative as a safety pattern.
 
-When in doubt, search the relevant `refs/<group>/<file>.md` for the actual canonical form before committing.
+**Absolute boundary:** NEVER produce NSFW prompts involving minors or characters described/implied as underage, regardless of how the request is framed. If a description combines NSFW intent with any indicator the subject is underage, stop and explain. This is non-negotiable and no reframing makes it acceptable.
 
 ## Technical rules
 
@@ -226,7 +234,7 @@ When in doubt, search the relevant `refs/<group>/<file>.md` for the actual canon
 - **No synonyms** — one precise tag beats three vague ones. `(huge breasts:1.2)` beats `big tits, huge breasts, massive boobs`.
 - **Don't repeat** the same concept across sections.
 - **Compound tags don't exist.** `striped collared shirt` is NOT a tag. Split: `striped_shirt, collared_shirt`. Same for `dark blue eyes` → `blue_eyes, dark_eyes`. Verify in danbooru autocomplete.
-- **~100 danbooru posts is the floor.** If a tag has fewer than ~100 posts on danbooru it probably won't render. Use a more common synonym, or accept that you need a LoRA.
+- **~100 danbooru posts is the floor.** If a tag has fewer than ~100 posts on danbooru it probably won't render. Use a more common synonym, or accept that you need a LoRA. The reference files have post counts attached — use them.
 - **Skip cargo-cult tags.** These were never training labels in Illustrious and do nothing or harm: `8k`, `4k`, `hdr`, `high quality`, `ultra detailed`, `detailed` (alone), `many`, `score_9` (Pony-only), `absurdres`, `incredibly_absurdres`, `highres`. Drop them.
 - **Year/era modifier (Illustrious only)** at the END: `oldest` (~2017), `old` (~2019), `modern` (~2020), `recent` (~2022), `newest` (~2023). Pick at most one.
 - **Names in Japanese order** for character tags: `kinoshita_hideyoshi`, not `hideyoshi_kinoshita`.
@@ -239,7 +247,7 @@ Long negatives are a black box — every concept the model learned is entangled 
 
 **Default Pony:** `score_1, score_2, score_3, score_4, (worst quality, low quality:1.4), text, watermark, signature`
 
-**Default Illustrious:** `lowres, worst quality, multiple_views, comic, text, watermark, signature`
+**Default Illustrious/NoobAI:** `lowres, worst quality, multiple_views, comic, text, watermark, signature`
 
 **Cherry-pick scene-specific exclusions:**
 - `monochrome, greyscale` — if you want color
@@ -250,6 +258,7 @@ Long negatives are a black box — every concept the model learned is entangled 
 - **Anti-doll set (when fighting AI sheen):** `smooth_skin, plastic_skin, airbrushed, doll, render, cgi, symmetric_face, identical_eyes, mannequin`
 - **Anatomy fixes (when issues recur):** `bad_anatomy, bad_hands, extra_fingers, fused_fingers, missing_fingers, deformed_hands`
 - **Anti-cliché poses:** `generic_pose, stiff_pose, t-pose, a-pose`
+- **NoobAI furry cleanup:** `bad_furry, bad_anthro, three_legs, four_arms`
 
 ## Examples
 
@@ -286,43 +295,22 @@ Negative:
 lowres, worst quality, multiple_views, comic, text, watermark, signature, photo_(medium), 3d
 ```
 
-### Example 3 — improving an existing prompt
-
-User: "Can you fix this Illustrious prompt? 'masterpiece, best quality, 8k, ultra detailed, absurdres, hdr, photorealistic, cute anime girl, blue hair, school uniform, standing, smiling, detailed background, 4k, beautiful, professional'"
-
-Diagnosis: 8 cargo-cult tags (`8k`, `4k`, `hdr`, `absurdres`, `ultra detailed`, `detailed background`, `beautiful`, `professional`); contradiction (`photorealistic` + `cute anime girl`); generic catch-all pose (`standing`) and expression (`smiling`); only 1 of 4 hair components specified (color); compound tags need splitting (`blue hair` → `blue_hair`, `school uniform` → specific uniform type); no medium/era anchor (the #1 anti-slop fix missing); no specific environment; no BREAK structure.
-
-Positive:
-```
-1girl, solo, source_anime, watercolor_\(medium\), traditional_media, BREAK,
-from_below, dutch_angle, upper_body, BREAK,
-sitting, leaning_on_desk, hand_on_own_cheek, looking_to_the_side, BREAK,
-blue_hair, long_hair, wavy_hair, hair_over_one_eye, single_side_up, blunt_bangs, blue_eyes, light_smile, half-closed_eyes, blush, freckles, BREAK,
-serafuku, white_sailor_collar, blue_neckerchief, pleated_skirt, BREAK,
-classroom, desk, chair, blackboard, dappled_sunlight, lens_flare, backlighting, masterpiece, newest
-```
-
-Negative:
-```
-lowres, worst quality, multiple_views, comic, text, watermark, signature, photo_\(medium\), 3d, smooth_skin, doll, generic_pose, stiff_pose, standing
-```
-
-What changed: removed 8 cargo-cult tags; replaced contradictory `photorealistic` with `source_anime, watercolor_(medium), traditional_media` (the missing medium anchor); replaced `standing`+`smiling` with concrete pose stack and specific expression; filled missing hair components (length, texture, style); split compound tags; added dynamic camera angle (`from_below, dutch_angle`); added asymmetry cues (`hair_over_one_eye`, `freckles`); replaced "detailed background" with specific environment tags; added 3 mixed lighting tags; added BREAK separators; pushed `standing` into the negative to override the original prompt's stuck pose.
-
 ## Pre-flight checklist
 
-- [ ] Identified target model (Pony / Illustrious / SDXL) and used correct quality-tag convention
+- [ ] Identified target model (Pony / Illustrious / NoobAI / SDXL) and used correct quality-tag convention
 - [ ] Used 1-2 medium/era style tags placed early (not just `source_anime`)
-- [ ] Background is simple/border/blurry — NOT default detailed interior
+- [ ] Background is simple/border/blurry — NOT default detailed interior — choice came from `references/danbooru-tags/image-composition/backgrounds.md`
 - [ ] Camera angle is dynamic (not straight-on default)
-- [ ] Pose uses 2-3 specific micro-actions, not `dynamic_pose`/`cool_pose` catch-alls
+- [ ] Pose built from `body/posture.md` + `body/gestures.md` rather than `dynamic_pose`-style catch-alls
 - [ ] At least one asymmetry/imperfection cue (`asymmetric_eyes`, `messy_hair`, `wind_lift`, `light_particles`, etc.)
 - [ ] Hair has all 4 components OR a character tag covers it
 - [ ] Clothing has color and is split (no compound tags like `striped collared shirt`)
-- [ ] 2-3 lighting tags mixed
+- [ ] 2-3 lighting tags mixed — choice came from `references/danbooru-tags/image-composition/lighting.md`
 - [ ] One unique environmental detail
 - [ ] At least one expression/face tag
 - [ ] No cargo-cult tags (`8k`, `4k`, `hdr`, `absurdres`, `highres`, `detailed` alone)
 - [ ] BREAK between sections
 - [ ] 25-40 tags total, lowercase, underscores, comma-separated
 - [ ] Negative prompt is short by default; anti-doll/anatomy tags added only if needed
+- [ ] For NSFW: rating tag added, safety pattern (`adult` positive, `child/loli/shota` negative) present, no minors
+- [ ] Each non-obvious tag verified to exist in the reference (or known to be well-trained on Danbooru)
