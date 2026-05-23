@@ -34,13 +34,14 @@ See `references/model-variants.md` for full details on each variant.
 
 ## Reference precedence
 
-- `references/official-prompt-structure.md` — Lightricks' canonical 7-component prompt structure with examples. The single most important reference. Open this for any LTX prompt.
+- `references/enrichment-palette.md` — the categorized 8-category menu for **Enhance Mode**: subject + KEY MOTION, body mods + accessories + wardrobe, subject action/emotion, scene environment, camera control, light interaction, atmosphere + named anchor, audio layer. Includes the off-center-detail master rule. **Always open this when the user gives a thin seed, asks to improve a draft, or hands you audio for A2V.**
+- `references/official-prompt-structure.md` — Lightricks' canonical 7-component prompt structure with examples. The single most important reference. Open this for any LTX prompt. The Enhance Mode rubric MAPS ONTO this structure — it doesn't replace it.
 - `references/audio-prompting.md` — How to describe soundscapes, dialogue, ambient audio, and music for LTX-2's native audio generation. The killer feature.
 - `references/camera-control-loras.md` — The discrete camera-control LoRA catalogue with trigger conventions for each.
 - `references/resolution-and-duration.md` — LTX's hard constraints (pixel dimensions divisible by 32, frame counts divisible by 8+1, aspect ratios, duration options). Critical for not wasting generations.
 - `references/model-variants.md` — Full variant catalogue and routing logic.
 
-You don't need to open all of these for every prompt. The official prompt structure reference covers most cases.
+You don't need to open all of these for every prompt. The official prompt structure reference covers most cases. Reach for `enrichment-palette.md` whenever you're in Enhance Mode.
 
 ## Output requirement
 
@@ -117,6 +118,69 @@ Example following the structure:
 > A young man in a blue cotton t-shirt sits at a wooden desk and begins typing on a laptop keyboard, his fingers moving in natural rhythmic strokes before he leans back in his chair to read what he's written. He has short dark brown hair, a faint stubble, and glasses pushed slightly down his nose; his right hand reaches up briefly to push them back into place. The desk is cluttered with a half-empty coffee mug, a small notebook open to a page of handwritten notes, and a tangled phone charger; behind him, a window shows soft autumn afternoon light filtering through partially-drawn curtains. The camera holds at a medium shot from chest height, framing him slightly off-center to the left. Warm natural window light falls across his face from the right side while cool ambient light from the laptop screen catches his glasses. Halfway through the clip, he glances toward the window briefly before returning his focus to the screen.
 
 See `references/official-prompt-structure.md` for the full structure with multiple examples covering different scene types.
+
+## Enhance Mode — thin seeds, improvement requests, and A2V visuals
+
+**Enhance Mode fires when any of these is true:**
+
+- (a) the user pastes an existing prompt and asks to fix / improve / enhance it, OR
+- (b) the seed is a short undifferentiated phrase like *"a girl in a forest"*, *"barista making espresso"*, *"a stormy night"*, *"a man pouring whiskey"*, OR
+- (c) the user supplies an audio file for A2V and needs a visual prompt that locks to it.
+
+All three go through the same rubric. The goal is a **non-generic, specific, observed-looking** prompt that **outputs in Lightricks' 7-component structure** — not "more detailed." More detail without specificity just makes a longer mediocre clip.
+
+**Always open `references/enrichment-palette.md` when in Enhance Mode.** That file is the 8-category menu you pick from. Pick by scene-type (table at the top), not by working down each category.
+
+### The rubric — run in one pass, in order — output maps to the 7-component structure
+
+The rubric has 10 steps. The OUTPUT is a single flowing paragraph in the official 7-component order. Each rubric step fills out one or two components.
+
+1. **Diagnose** (1–2 sentences). What's missing? Likely: doesn't start with action, no specific subject, no named-reference anchor, no light interaction, generic adjective stack, no concrete environmental prop, no off-center detail, no audio layer for LTX-2+. **Show the diagnosis to the user only if they pasted an existing prompt; skip it for thin seeds and A2V** (don't critique a one-liner or an audio file).
+
+2. **Specify subject + KEY MOTION** → fills components 1 (main action, the first sentence) and 3 (character appearance). From the palette's category 1. The first sentence of the output is the KEY MOTION — a concrete verb + specific manner, front-loaded. Add 2–3 subject specifics (face / hair / hands / posture).
+
+3. **Subject action and emotion** → fills component 2 (specific movements and gestures). From the palette's category 3. Pair a concrete action with one emotional-register cue. Don't state mood as a standalone adjective.
+
+4. **Wardrobe / accessories / body-mods** → also feeds component 3. From the palette's category 2. Pick 2–3 high-leverage items. Include at least one motion cue (how the fabric moves, how a curl springs back) — video weighs these.
+
+5. **Scene environment** → fills component 4 (background and environment). From the palette's category 4. Pick 1–2 props that imply life-before-the-camera.
+
+6. **Camera control** → fills component 5 (camera angles and movements). From the palette's category 5. Either name a discrete LTX camera-control LoRA (`Dolly-In`, `Dolly-Out`, `Dolly-Left`, `Dolly-Right`, `Jib-Up`, `Jib-Down`, `Static`) and mention the move in the prompt, OR describe a free-form camera move. Pick ONE principal move — avoid compound moves on a single shot.
+
+7. **Light interaction** → fills component 6 (lighting and colors). From the palette's category 6. 2–3 light details with direction + quality + source. Be **qualified-negative aware**: if a candle / gas lamp / fluorescent / neon is in scene and naturally flickers, state it as intentional and use `flickering frame artifacts` in the negative (never bare `flickering`).
+
+8. **Atmosphere + ONE named anchor** → also fills component 6 (colors/mood end) and the implicit style overlay. From the palette's category 7. One cinematographer / director-DP pairing / slow-cinema director. **One anchor. Stacking two muddies the output.**
+
+9. **Audio layer (LTX-2+)** → woven through the paragraph; mid-clip audio events feed component 7 (changes or sudden events). From the palette's category 8. Always: one ambient bed + foley matched to the KEY MOTION. Optional: music (diegetic or non-diegetic, name which) + dialogue (one line max). For LTX-2.3 silent-film mode, skip this step and add a "no diegetic audio" note instead.
+
+10. **Off-center detail** → slot into ONE component (most often subject, scene, or as a beat in audio). From the palette's master rule. Exactly ONE per prompt — visual-side, audio-side, or audio/visual mismatch, never zero, never two.
+
+11. **Strip slop tokens.** Remove generic quality adjectives (*beautiful, stunning, masterpiece, 4k, 8k, hdr, ultra-detailed, professional, atmospheric, moody, dramatic, breathtaking, ethereal, magical*) AND video-slop (*epic, buttery 60fps, smooth motion, hyperreal, ultra-cinematic*). Move any legitimate temporal negatives to the qualified-negative format.
+
+12. **Audit.** Read the paragraph back in chronological order. Does it start with action? Does each component appear in order? Could this describe a clip a real cinematographer would shoot, or does it still sound like a prompt? Swap any remaining generic phrase for a concrete one.
+
+### A2V sub-rubric (when audio drives the video)
+
+When the user supplies an audio file, run the rubric with these shifts:
+
+- **Step 9 changes**: the audio is FIXED — do NOT generate an audio cue block. The supplied file is the conditioning. Output only Visual prompt + Negative prompt.
+- **Duration is locked**: pick the discrete duration option (2/3/4/5/6/7/8/9/10s) that matches the audio file's exact length.
+- **Beats and impulses MUST be matched**: any prominent audio event (a piano note, a beat drop, a chord change, a held silence) gets a corresponding visual event in the paragraph. Use the chronological structure to place them — "halfway through, she opens her eyes on the third bell strike."
+- **Step 6 (camera control) is constrained by audio energy**: slow audio → slow camera or locked-off; sudden audio → sudden cut/zoom/whip-pan; sustained drone → near-imperceptible drift; rising build → tracking move that resolves at the swell.
+- **Step 8 (atmosphere) mirrors audio character**: use the audio-character → visual-decisions table later in this skill to pick palette and pacing.
+- **Step 10 (off-center detail) is often a beat-match**: a visual that locks to a specific audio impulse counts as the off-center detail in A2V.
+
+### Output format
+
+- **User pasted an existing prompt:** 1–2 sentence diagnosis → 7-component positive prompt in a code block → negative prompt in a code block → recommended params line → short bullet list of what changed, calling out the named-reference anchor and the off-center detail explicitly.
+- **User gave a thin seed:** skip the diagnosis. 7-component positive prompt → negative → params → short bullet list of what you added.
+- **User supplied A2V audio:** skip the diagnosis. **Visual prompt** code block (not "Positive prompt" — A2V uses Visual) → negative → params line including the locked duration and `A2VPipeline` → short bullet list including which audio beats you matched.
+
+### Escape hatch
+
+When the seed already carries an unusual ingredient — *"a Magritte-style sky of bowler-hatted men raining slowly"*, *"a Hopper diner reimagined underwater"*, *"a still life of broken neon signs"* — the rubric overconstrains. Keep the existing concept. Add ONLY: light interaction, ONE off-center detail, ONE named anchor, minimal audio bed (one ambient layer). Don't pile on subject specifics that fight the surreal/abstract register.
+
+See Examples 8 (thin-seed T2V with audio) and 9 (A2V) below for canonical patterns.
 
 ## Length: match prompt to duration
 
@@ -390,6 +454,62 @@ What changed: opens with the main action (walking along a path), follows the 7-c
 
 **Params:** LTX-2.3, 1216×704, 24fps, 8s, `TI2VidTwoStagesPipeline`, `cfg_scale: 4.0`
 
+### Example 8 — Enhance Mode, thin-seed T2V with audio, LTX-2.3 (NEW)
+
+User: *"a man pouring whiskey at a kitchen counter"*
+
+Positive prompt:
+```
+A man in his late forties pours a slow stream of whiskey from a half-empty bottle into a heavy-bottomed tumbler on a butcher-block counter, the amber liquid catching the light as the level rises. He wears a worn oxford-cloth button-down with the cuffs rolled twice, a thin pale scar through his left eyebrow, and a faded burn on the back of one hand that the camera catches as he sets the bottle down. The kitchen behind him is dim and unhurried — a single hanging bulb over the counter, a half-finished crossword laid open at the far end with a ballpoint across it, a kettle just off the burner still ticking. The ambient sound is the low hum of a refrigerator with the occasional ice-maker thunk from another room; the foley layer is dominated by the glug and rising pitch of the pour, then the soft glass-on-wood weight as the bottle settles. The camera holds in a slow steady dolly-in from chest height on his right side, tightening fractionally as the glass fills. Warm tungsten from the overhead bulb falls across his hands and the rim of the tumbler, cool blue spill from a far window touching the back of his neck — face half in each. Shot in the register of Kelly Reichardt: unhurried, slightly melancholy, the gesture of the pour given more weight than it deserves. As the last drop falls, a phone buzzes once on the counter behind him — he doesn't look at it.
+```
+
+Negative prompt:
+```
+blurry, low quality, distorted, watermark, signature, deformed, jittery motion, flickering frame artifacts, frame interpolation artifacts, motion smearing, oversaturated, washed out, face deformation, identity drift, silent video, missing audio, audio-visual desync
+```
+
+**Params:** LTX-2.3, 1216×704, 24fps, 8s, `TI2VidTwoStagesPipeline`, `cfg_scale: 4.0`
+
+What was added:
+- **KEY MOTION + Subject specifics:** pouring whiskey as the first sentence; age, oxford-cloth button-down with rolled cuffs, scar through brow, faded burn on the hand.
+- **One named-reference anchor:** Kelly Reichardt — unhurried slow-cinema register, fits the scene. (Not stacked with a DP name.)
+- **Off-center detail:** the phone buzzing once on the counter behind him, never looked at — audio-side off-center detail.
+- **Scene environment:** half-finished crossword, ticking kettle — implied life-before-the-camera.
+- **Camera control:** slow steady dolly-in (could swap to `LTX-2-19b-LoRA-Camera-Control-Dolly-In` if motion quality is critical).
+- **Light interaction:** warm tungsten + cool window blue, face half in each.
+- **Audio layer:** ambient (fridge hum + ice-maker thunk), foley (glug + rising pitch, glass-on-wood weight). No music, no dialogue — the scene doesn't ask for them.
+- **Qualified negative:** `flickering frame artifacts` not bare `flickering` (in case the bulb is treated as a slightly unstable practical).
+- **Slop stripped:** zero "cinematic / atmospheric / professional / 8k" tokens.
+
+### Example 9 — Enhance Mode, A2V audio-to-video, LTX-2.3 (NEW)
+
+User: *"I have a 7-second clip of slow piano — a melancholy minor-key melody with a long pause halfway through. Generate a video that locks to it."*
+
+Note: user supplies the audio → audio cue block omitted. Visual register matched to audio character (slow piano → cool greys + one warm accent, locked-off or very slow dolly-in, quiet beats matched to phrasing). The long pause halfway through gets a corresponding visual beat — the off-center detail is the beat-match.
+
+Visual prompt:
+```
+A woman in her early thirties sits at the edge of an unmade bed in a half-lit bedroom, both hands resting palm-up on her knees, staring at the floor in front of her. She wears an oversized cream knit sweater that's slipped slightly off one shoulder, dark hair loose and falling forward to hide part of her face; a single bobby pin holds nothing in place behind one ear. The bedroom around her is quiet and lived-in — sheets pushed back on one side, an open paperback face-down on the nightstand, a half-finished mug of tea gone cold, a single thin curtain drawn against a grey sky outside. The camera holds in a slow, near-imperceptible dolly-in from a respectful distance, tightening so gradually the move is felt rather than seen. Cool grey daylight diffuses through the curtain on her left; the warm amber of a single bedside lamp on her right just catches the edge of her cheekbone — face half in each, mostly in shadow. Atmosphere in the register of Chantal Akerman: locked-off, observational, every gesture lingering a beat longer than it needs to. As the piano's long pause arrives at the midpoint, she slowly raises her head and exhales — a single visible breath that holds, then settles — before the melody resumes and her gaze drops back to the floor.
+```
+
+Negative prompt:
+```
+blurry, low quality, distorted, watermark, signature, deformed, jittery motion, flickering frame artifacts, motion smearing, face deformation, identity drift, audio-visual desync, mismatched mood, upbeat tempo, fast cuts, sudden cuts, sudden movements, kinetic camera
+```
+
+**Params:** LTX-2.3, 1216×704 (16:9), 24fps, **7s** (exact match to audio file duration), `A2VPipeline` with the supplied audio file as conditioning, `cfg_scale: 4.0`
+
+What was matched and added:
+- **Audio-duration locked:** visual is 7s exactly — matches the supplied piano clip.
+- **Beat-matched off-center detail:** the long pause in the audio at the midpoint is matched by her slow head-raise and visible exhale that holds before resolving — single observed beat, locked to one audio impulse. This is the off-center detail.
+- **Camera constrained by audio energy:** slow piano + long pause → near-imperceptible dolly-in, no other camera moves.
+- **Palette mirrors audio character:** cool greys + one warm accent (lamp), face half in each — matches melancholy slow-piano register.
+- **One named-reference anchor:** Chantal Akerman — locked-off, observational, slow-cinema register.
+- **Subject specifics:** age, oversized cream knit slipped off one shoulder, bobby pin holding nothing.
+- **Scene environment:** unmade bed, paperback face-down, cold tea — implied life-before-the-camera.
+- **No audio cue block in output:** correct A2V handling (the audio is conditioning, not generated).
+- **Negative explicitly suppresses upbeat / kinetic / sudden** so the model doesn't fight the audio's register.
+
 ## Pre-flight checklist
 
 Before returning the prompt, verify:
@@ -400,17 +520,22 @@ Before returning the prompt, verify:
 - [ ] Chronological order — events described in the order they happen
 - [ ] Specific character/object appearances precisely described
 - [ ] Background and environment included
-- [ ] Camera angle AND camera movement specified
+- [ ] Camera angle AND camera movement specified — **camera control explicitly named** (LTX camera-control LoRA name OR free-form move with real cinematography vocabulary)
 - [ ] Lighting has direction + quality + source
 - [ ] Notes any changes or sudden events that occur
 - [ ] Under 200 words (Lightricks' hard guidance)
 - [ ] Length matches duration (2–3 sentences per 2–3s clip, 6–8 per 10s clip)
-- [ ] For LTX-2+: audio layers described (ambient + subject sounds + optional music/dialogue)
+- [ ] **For LTX-2+: audio layer specified** — ambient + foley minimum (matched to the KEY MOTION), with music/dialogue if requested. For silent-film mode, explicit "no diegetic audio" note instead.
+- [ ] **Exactly ONE named-reference anchor** (cinematographer / director-DP pairing / slow-cinema director) — never "cinematic" / "atmospheric" / "professional" as the anchor, never two anchors stacked
+- [ ] **Exactly ONE off-center detail per prompt** — the master anti-generic rule. Visual-side, audio-side, or audio/visual mismatch — never zero, never two.
+- [ ] **Qualified negatives used correctly:** `flickering frame artifacts` (not bare `flickering`) when candles / gas lamps / fluorescents / neon / lightning are intentionally in scene; `silent video, missing audio, audio-visual desync` instead of `silent`; never suppress an intentional ambient sound with a bare negative
 - [ ] For I2V: motion described, no new elements added
+- [ ] **For A2V: visual duration matches audio duration exactly** (closest valid discrete option from 2/3/4/5/6/7/8/9/10s); audio cue block OMITTED (supplied audio is conditioning); prominent audio beats matched by visual beats; camera pacing constrained by audio energy
 - [ ] Negative prompt is short and targeted
-- [ ] Resolution conforms to LTX constraints (divisible by 32)
+- [ ] **Resolution divisible by 32** confirmed
 - [ ] Duration is a valid discrete option (2/3/4/5/6/7/8/9/10s)
-- [ ] No quality-adjective crutches (4k, masterpiece, professional)
+- [ ] No quality-adjective crutches (4k, masterpiece, professional) and no video-slop (epic, buttery 60fps, smooth motion, hyperreal, ultra-cinematic)
 - [ ] Real cinematography vocabulary, not vague terms
 - [ ] Recommended parameters noted
+- [ ] If in Enhance Mode: opened `references/enrichment-palette.md` and picked enrichments by scene-type
 - [ ] For NSFW: `adult` modifier present, no-minors boundary maintained

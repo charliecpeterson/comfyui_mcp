@@ -39,13 +39,68 @@ See `references/model-variants.md` for deeper detail per variant and routing log
 
 ## Reference precedence
 
+- `references/enrichment-palette.md` — the categorized menu for **Enhance Mode**: subject + key motion, body modifications, accessories, wardrobe-in-motion, camera movement vocabulary, environmental motion, light interaction (incl. multi-shot continuity), named-reference anchors (cinematographers and director-DP pairings), and the off-center-detail rule. **Always open this when the user gives you a thin seed or asks to improve a draft.**
 - `references/wan-22-prompting.md` — the official Tongyi Wanxiang prompt formulas for Wan 2.2 (basic and advanced), with the canonical structure that comes from Alibaba's own docs
-- `references/cinematography-vocabulary.md` — camera movements, shot types, lens vocabulary that Wan understands. This is high-leverage — Wan rewards real cinematography language.
+- `references/cinematography-vocabulary.md` — camera movements, shot types, lens vocabulary that Wan understands. This is high-leverage — Wan rewards real cinematography language. The enrichment palette's camera section complements rather than duplicates this file.
 - `references/negative-prompts.md` — Wan's negative prompt patterns. Critical for I2V (prevents morphing/warping/distortion) and meaningfully different from image-model negatives.
 - `references/wan-26-shot-blocks.md` — the new shot-block structured prompting convention for Wan 2.6 and 2.7. Use this for any 2.6+ prompts.
 - `references/model-variants.md` — full variant catalogue, parameter routing, and version-specific quirks.
 
-Don't read all of these for every prompt. Open the one(s) you need for the current decision.
+Don't read all of these for every prompt. Open the one(s) you need for the current decision. Always open `enrichment-palette.md` in Enhance Mode.
+
+## Enhance Mode — thin seeds and improvement requests
+
+**Enhance Mode fires when either:**
+
+- (a) the user pastes an existing Wan prompt and asks to fix / improve / enhance it, OR
+- (b) the seed is a short undifferentiated phrase like *"two strangers on a train platform"*, *"a fishing boat at sunrise"*, *"cyberpunk city"*, *"a chase through a tunnel"*.
+
+Both go through the same rubric. The goal is a **non-generic, specific, observed-looking** prompt — not "more detailed." More detail without specificity just makes a longer mediocre prompt.
+
+**Always open `references/enrichment-palette.md` when in Enhance Mode.** That file is the menu you pick from. Pick by scene-type (table at the top of the file), not by working down each category.
+
+### Branch on target Wan version FIRST
+
+The rubric BRANCHES on version because the output structure is fundamentally different:
+
+- **Wan 2.1 / 2.2 and earlier:** single dense sentence (or 2 sentences for the advanced formula). Subject + key motion + scene + camera + atmosphere + style + named anchor + off-center detail all collapse into one prose block. **Order matters — front-load subject and motion.**
+- **Wan 2.6 and later:** shot-block format with timecodes. Each shot gets: timecode → camera → subject + motion → environmental motion → light → (off-center detail in ONE shot only). Named anchor goes in the global look or the style/atmosphere line at the top of the block. Continuity anchors per shot.
+- **Wan 2.7 multi-reference:** the multi-reference template (Reference assignment block + brand palette HEX) layers on top of the 2.6+ shot-block rubric. Reference assignments and brand palette come FIRST; then the shot-block rubric applies. Brand-color HEX placement sits in the global look's style/atmosphere line and is restated as a continuity anchor in later shots.
+
+If the user's request doesn't name a version, ask. ("Are you targeting Wan 2.2 or Wan 2.6+? The structure differs.") If they hint a version indirectly (e.g. "I want a multi-shot reveal") infer 2.6+ and say so.
+
+### The rubric — run in one pass, in order
+
+1. **Diagnose** (1–2 sentences). What's missing? Likely: no specific subject, no key motion, no named camera move, dead air (no environmental motion), no named-reference anchor, no light interaction, generic adjective stack, no off-center detail, multi-shot prompt without continuity anchors. Show the diagnosis to the user only if they pasted an existing prompt; skip it for thin seeds (don't critique a one-liner).
+
+2. **Specify the subject + KEY MOTION.** Replace "a woman" / "a man" / "a person" with 1–3 concrete facts drawn from the palette's **Subject specifics** AND name ONE key motion the subject performs in the shot (a held breath, a fingertip drumming twice, a glance off-camera and back). Motion is part of subject specificity in video — a generic "walks" or "looks" is the #1 cause of stock-feeling Wan output. Also locate the subject relative to the camera (medium close-up, over-the-shoulder, etc.).
+
+3. **Anchor the style with ONE named reference.** From the palette's **Named-reference anchors** — a cinematographer (Roger Deakins, Christopher Doyle, Lubezki, Hoytema, Bradford Young...) OR a director-DP pairing (Wong Kar-wai + Doyle, Malick + Lubezki, Nolan + Hoytema, Lanthimos + Bakatakis) OR a genre/era (70s New Hollywood handheld, contemporary slow-cinema, cinéma vérité). **One anchor. Stacking two muddies the output.**
+
+4. **Add the off-center detail.** Exactly ONE small, hyper-specific, observed-feeling micro-event (a hand trembling for a single beat, a stray leaf drifting through the lens during a pan, a phone vibrating once that the subject doesn't reach for, steam crossing the frame at one specific moment). For 2.6+ multi-shot, place it in ONE shot only — never in every shot, never in the global look. **Never skip it. Never include two.**
+
+5. **Light interaction (2–3 details).** Describe HOW the light interacts — practical sources, color of bounce, time-of-day named precisely. For 2.6+ multi-shot with shots that span time, name the transition explicitly. For simultaneous shots, restate the key-light side and color temp as a continuity anchor.
+
+5.5. **Camera movement.** Pick ONE movement from the palette's **Camera movement vocabulary** (slow push-in, lateral track, handheld follow, Steadicam glide, drone descend, orbit, etc.) or explicitly say "locked-off static." Don't leave the camera unspecified — Wan defaults to a generic drift. For 2.6+, each shot block gets its own camera move; pick differently across shots for variety unless continuity demands otherwise.
+
+5.7. **Environmental motion.** Pick ONE primary indicator from the palette's **Environmental motion** category (wind shown by hair, dust catching backlight, steam crossing the frame, condensation rolling down a window, a curtain billowing at the edge of frame). Don't leave the air dead — dead-air shots read as CGI. Stacking environmental motion cues muddies the model; one is enough.
+
+6. **Wardrobe-in-motion (1 cue) + environmental props (1 cue) if the scene supports them.** Don't just describe what fabric is — describe how it reacts to motion (linen catching the breeze, a coat hem trailing a half-beat behind a turn, a sweater hem riding up when she reaches). For environmental props, pick something that implies the subject was here before the camera arrived.
+
+7. **Strip slop tokens.** Remove generic quality adjectives (*beautiful, stunning, masterpiece, 8k, ultra-detailed, professional, atmospheric, moody, dramatic, epic, breathtaking, ethereal, magical*) and standalone *"cinematic"*. Video-specific slop to strip from positive prompts: *"smooth motion," "buttery 60fps," "hyperreal," "ultra-cinematic," "epic," "breathtaking."* For Wan, the negative prompt is supported — these slop terms can go in the negative if useful, but mostly just delete them. Replace each removed slop term with a concrete detail or remove.
+
+8. **Audit.** Read the prompt back. Could this describe a clip a real cinematographer might have captured, or does it still sound like a prompt? Verify: one named anchor, one off-center detail (one — not zero, not two), camera explicitly named, environmental motion explicitly named, light is interacting not just labeled. For 2.6+: continuity anchors present in shots 2+.
+
+### Output format
+
+- **User pasted an existing prompt:** 1–2 sentence diagnosis → fixed prompt in the appropriate output structure (single-block for 2.2, shot-block for 2.6+) → bullet list of what changed and why, calling out the named anchor and the off-center detail explicitly.
+- **User gave a thin seed:** skip the diagnosis. Enhanced prompt in the appropriate output structure → short bullet list of what you added and why, naming the anchor and the off-center detail.
+
+### Escape hatch
+
+When the seed already carries an unusual or surreal ingredient — *"a Lynchian dream of a phone booth at the edge of a wheat field"*, *"a fish swimming through a kitchen as if it's the ocean"*, *"a Magritte sky raining bowler hats over a city street"* — the rubric overconstrains. Keep the existing concept; add ONLY camera movement, one environmental motion cue, one off-center detail, and one named anchor. Don't pile on subject specifics that fight the surreal/abstract register.
+
+See Examples 6 and 7 below for the canonical Enhance Mode patterns (one shot-block, one single-sentence).
 
 ## Output requirement
 
@@ -423,6 +478,68 @@ Notes: demonstrates the **Reference assignment** output block, brand-palette HEX
 
 **Params:** Wan 2.7, 10s, **Thinking Mode ON**, ~24fps, `cfg_scale: 6.0`. Pass References 1–3 in the order assigned above.
 
+### Example 6 — Enhance Mode, thin seed, Wan 2.6+ shot-block (the headline test)
+
+User: *"two strangers on a train platform"*
+
+(Default to Wan 2.6 for a thin seed with multi-shot potential; said so before generating.)
+
+```
+**Global look:**
+Late dusk pulling into night, a suburban commuter platform under sodium-yellow overhead lamps with the last cold blue of sky still in the gaps above the canopy, in the register of Christopher Doyle on In the Mood for Love — saturated edges, slow shutter, slight blown highlights on the lamps. Anamorphic lens character, gentle horizontal flare on the brightest sources.
+
+**Shot 1 [0–5s]:**
+Medium long shot, locked-off static. A woman in her early thirties in a long charcoal wool coat (collar turned up, one button missing at the waist) stands at the edge of the platform looking down the track to camera-left, a leather tote at her feet. A man in his late forties in a tan barn jacket stands fifteen feet to her right, hands in his pockets, also looking down the track. Neither moves much — she shifts her weight once, he exhales and the breath fogs faintly in the cold air. Continuity anchors for this sequence: charcoal wool coat with the missing button, tan barn jacket, sodium-lamp key from above, the platform's specific concrete pattern.
+
+**Shot 2 [5–10s]:**
+Same woman, same charcoal coat (missing button), same sodium-lamp key from above as Shot 1 — continuity is critical. Cut to a medium close-up from her three-quarter front, the camera in a glacial slow push-in over the full duration of the shot. She tucks a loose strand of hair behind her ear without looking down. A receipt slips from the open mouth of her tote and lands face-up on the platform, the wind from the approaching train lifting it half an inch and setting it back down — she doesn't reach for it. Her hair drifts slightly in the same wind, the only environmental motion. The sodium light catches one cheekbone.
+
+**Shot 3 [10–15s]:**
+Same man, same tan barn jacket, same sodium-lamp key as Shots 1 and 2. Wide two-shot from a low angle behind both subjects, the headlight of the approaching train just visible at the far end of the platform. Steadicam glides forward a single deliberate beat toward them, the train's wash beginning to lift the edges of both coats. Neither looks at the other.
+
+**Negative prompt:**
+identity drift, character morphing, wardrobe changes between shots, missing-button drift, inconsistent lighting between shots, color shifting, scale changes, new elements appearing, jittery handheld, motion smearing, deformed faces, extra limbs, label warping, frame interpolation artifacts
+```
+
+What was added:
+- **Named-reference anchor:** Christopher Doyle on *In the Mood for Love* — one anchor, in the global look only, not restated as a register in every shot.
+- **Subject specifics + key motion:** charcoal wool coat with one button missing at the waist, tan barn jacket, ages, the woman's weight shift, the man's fogged exhale — small physical specificity over generic "stands."
+- **Camera movement, one per shot:** Shot 1 locked-off static, Shot 2 glacial slow push-in, Shot 3 Steadicam glide. Each shot's camera has a distinct identity.
+- **Environmental motion:** wind from the approaching train shown ONCE — through the receipt lifting and the hair drifting in the same beat. One primary indicator, not stacked.
+- **Off-center detail (in Shot 2 only):** the receipt slipping out of the tote, lifting half an inch in the train's wash, never recovered. Observed, not invented; placed in exactly one shot.
+- **Light interaction:** sodium-yellow overhead lamps + the last cold blue in the sky + the lamp catching one cheekbone in Shot 2 — interacting, not labeled.
+- **Continuity anchors:** charcoal coat + missing button, tan jacket, sodium key direction restated each shot. The missing button is a strong continuity hook because it's a specific imperfection Wan can track.
+
+**Params:** Wan 2.6, ~15s, Thinking Mode if available, `cfg_scale: 6.0`. Three shot-blocks within the 15s budget; continuity anchors mandatory.
+
+### Example 7 — Enhance Mode, thin seed, Wan 2.2 single-sentence
+
+User: *"a fishing boat at sunrise"*
+
+(Default to Wan 2.2 T2V for a single-shot seed; mentioned that 2.6 would let it become multi-shot if wanted.)
+
+Positive prompt:
+```
+A weathered wooden fishing boat with peeling pale-blue paint and a single missing letter from the stenciled name on the bow ("MAR — A" with the second letter scuffed away) putts out of a small harbor at the moment the sun first clears the horizon, a fisherman in his sixties in a faded yellow oilskin coat (sleeves rolled twice, a long thin scar along the inside of his left forearm visible at the rolled cuff) standing at the wheel as he glances down at a coiled rope at his feet without slowing the throttle, while one gull tracks the boat at the right edge of the frame and the warm low light catches the steam rising from a chipped enamel mug wedged in the dashboard at one specific beat as the boat clears the breakwater. Camera locked-off static from a low dock-level vantage as the boat passes left to right, anamorphic lens with subtle horizontal flare on the rising sun, slight color cast pushing the highlights warm and the shadows cool — in the register of 70s New Hollywood handheld pulled toward Terrence Malick magic-hour patience.
+```
+
+Negative prompt:
+```
+bright colors, overexposed, static dead air, blurred details, subtitles, watermark, jpeg artifacts, low quality, deformed, malformed limbs, extra fingers, poorly drawn hands, poorly drawn faces, cluttered background, motion smearing, label drift, text warping, name-stencil morphing, smooth motion, ultra-cinematic
+```
+
+What was added (collapsed into the single sentence):
+- **Named-reference anchor:** *"70s New Hollywood handheld pulled toward Terrence Malick magic-hour patience"* — one anchor (the second clause is a qualifier of the first, not a stacked second name-drop).
+- **Subject specifics + key motion:** sixties, faded yellow oilskin, sleeves rolled twice, the scar on the forearm visible at the rolled cuff, AND the key motion (glancing down at the coiled rope without slowing the throttle — not just "drives the boat").
+- **Off-center detail:** the missing letter from the stenciled name on the bow ("MAR — A"). Observed, not invented; sticks in the eye.
+- **Camera movement:** locked-off static, low dock-level vantage, the boat passing left to right through frame — explicitly named, not left to Wan to default.
+- **Environmental motion:** steam rising from the chipped enamel mug crossing the frame at ONE specific beat as the boat clears the breakwater — one primary indicator, video-time-specific.
+- **Light interaction:** warm low light + the sun clearing the horizon + anamorphic flare on the rising sun + warm highlights / cool shadows — interacting, not labeled.
+- **Wardrobe-in-motion:** the oilskin's sleeves rolled twice and the scar visible at the cuff (a small implied motion as the arms move at the wheel).
+- **Order matters for 2.2:** subject + key motion front-loaded, camera and style at the back, off-center detail (missing letter) within the first third for emphasis.
+
+**Params:** Wan 2.2 T2V (14B), 720p, 24fps, 5sec, `cfg_scale: 6.5`, `steps: 40`.
+
 ## Pre-flight checklist
 
 Before returning the prompt, verify:
@@ -431,13 +548,18 @@ Before returning the prompt, verify:
 - [ ] For 2.2 T2V: followed the official subject + scene + motion + camera + atmosphere + style formula
 - [ ] For I2V: described motion of existing elements, didn't try to add new ones
 - [ ] For 2.6/2.7: structured as global look + shot blocks with timecodes
-- [ ] Specified ONE main camera movement per shot (or chained them sequentially with explicit timing)
+- [ ] For 2.7 multi-reference: Reference assignment block (and brand palette HEX if applicable) PRECEDES the shot blocks
+- [ ] Specified ONE main camera movement per shot (or chained them sequentially with explicit timing) — camera explicitly named or "locked-off," never left unspecified
 - [ ] Used real cinematography vocabulary (dolly, pan, push-in, tracking shot — not vague "dramatic" or "epic")
+- [ ] **Environmental motion explicitly described** — at least one primary indicator (wind in hair, dust catching backlight, steam crossing the frame, condensation rolling). Don't leave the air dead.
 - [ ] Included a negative prompt — Wan negatives are load-bearing, not optional polish
 - [ ] For I2V: added the morphing/warping/distortion prevention set
-- [ ] For multi-shot 2.6/2.7: restated continuity anchors (character, wardrobe, spatial logic) across shots
-- [ ] No quality-adjective crutches (4k, 8k, masterpiece, ultra-detailed, professional)
+- [ ] For multi-shot 2.6/2.7: restated continuity anchors (character, wardrobe, spatial logic, light direction) across shots
+- [ ] No quality-adjective crutches (4k, 8k, masterpiece, ultra-detailed, professional, smooth motion, buttery 60fps, hyperreal, ultra-cinematic)
 - [ ] Length matches variant (80–120 words T2V, 40–80 I2V, 30–60 per shot block on 2.6/2.7)
 - [ ] Atmosphere word and style anchor included for T2V
 - [ ] Recommended parameters noted
 - [ ] For NSFW: appropriate variant, `adult` modifier present, no-minors boundary maintained
+- [ ] **If in Enhance Mode:** opened `references/enrichment-palette.md` and picked enrichments by scene-type
+- [ ] **Exactly ONE named-reference anchor** (one cinematographer / director-DP pairing / genre-era anchor) — never "cinematic" / "atmospheric" alone, never two anchors stacked
+- [ ] **Exactly ONE off-center detail per prompt** (or per shot-block sequence, placed in ONE shot only — not in every shot, not in the global look). Never zero, never two.

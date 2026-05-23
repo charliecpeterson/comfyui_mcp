@@ -33,13 +33,14 @@ See `references/model-variants.md` for deeper detail per variant.
 
 ## Reference precedence
 
+- `references/enrichment-palette.md` — the categorized menu for **Enhance Mode**: subject specifics, body modifications, accessories, wardrobe, environmental props, light interaction (including the neon-noir cluster), named-reference anchors (including the synthwave / bilingual clusters Z-Image renders strongly), the **bias-guard category 8** that proactively substitutes Z-Image's narrow defaults on generic role tokens, and the off-center-detail master rule. **Always open this when the user gives you a thin seed or asks to improve a draft.**
 - `references/text-rendering-patterns.md` — patterns for posters, signage, slides, infographics, menus (a Z-Image killer use case alongside Qwen)
 - `references/editing-instructions.md` — Z-Image-Edit and Z-Image-Omni instruction patterns
 - `references/bilingual-and-multilingual.md` — Chinese, Japanese, Korean, and bilingual layouts
 - `references/model-variants.md` — full variant catalogue with parameter recommendations and routing logic
 - `references/prompt-enhancing.md` — the Tongyi-MAI Prompt Enhancer pattern: how to expand short prompts into richer ones using LLM reasoning before generation
 
-Open these as needed for the current decision. Don't read all of them for every prompt.
+Open these as needed for the current decision. Don't read all of them for every prompt — but DO open `enrichment-palette.md` any time you're in Enhance Mode.
 
 ## Output requirement
 
@@ -82,6 +83,60 @@ After the code block(s), add a one-line note on **recommended parameters** if th
 - **Z-Image-Edit:** `num_inference_steps: 25–35`, `guidance_scale: 3.5–4.0`
 
 No JSON, no preamble inside the code blocks.
+
+## Enhance Mode — thin seeds and improvement requests
+
+**Enhance Mode fires when either:**
+
+- (a) the user pastes an existing prompt and asks to fix / improve / enhance it, OR
+- (b) the seed is a short undifferentiated phrase like *"a runner at sunrise"*, *"a city at night"*, *"a programmer at work"*, *"a doctor in a hospital"*.
+
+Both go through the same rubric. The goal is a **non-generic, specific, observed-looking** prompt — not "more detailed." More detail without specificity just makes a longer mediocre prompt.
+
+**Always open `references/enrichment-palette.md` when in Enhance Mode.** That file is the menu you pick from. Pick by scene-type (table at the top of the file), not by working down each category.
+
+### The rubric — run in one pass, in order
+
+1. **Diagnose** (1–2 sentences). What's missing? Likely: no specific subject, no action, no named-reference anchor, no light interaction, generic adjective stack, no concrete environmental prop, no off-center detail, generic role token left at its narrow default. Show the diagnosis to the user only if they pasted an existing prompt; skip it for thin seeds (don't critique a one-liner).
+
+2. **Specify the subject — and proactively substitute defaults.** Replace "a woman" / "a man" / "a person" with 1–3 concrete facts drawn from the palette's **Subject specifics + Body modifications + Accessories + Wardrobe** categories. 4–6 specific facts beats 12 generic ones — don't pile on.
+
+   **Bias-substitution rule (Z-Image-specific, NOT optional).** When the seed contains a generic occupational / role token — *doctor, nurse, programmer, scientist, teacher, professor, chef, firefighter, police officer, student, soldier, athlete, dancer, businessman, CEO, fashion model, witch, rock star* — you MUST proactively substitute a non-default subject from the palette's **category 8**. Pick age range + gender + ethnicity + body type + non-default wardrobe specifics. Z-Image's default for generic role tokens is unusually narrow (doctor = white-male-coat-stethoscope; programmer = white-male-glasses-hoodie; nurse = white-female-scrubs), and the model's strong prompt adherence means it will faithfully render the narrow default unless you say otherwise. Substitute; don't ask the user; don't moralize about it — just write the richer subject.
+
+3. **Anchor the style with ONE named reference.** From the palette's **Named-reference anchors**. *"Editorial photography in the register of Saul Leiter"* or *"Cinematic still in the register of Newton Thomas Sigel on Drive"* — anchor to a real visual register, never to *"cinematic"* / *"professional"* / *"atmospheric"* alone. For retro / synthwave / neon / 80s / vaporwave / cyberpunk seeds, prefer the palette's **Retro / synthwave / neon-noir** subsection (Patrick Nagel, Drive, Blade Runner, Tron, Memphis, Outrun, Hotline Miami, neon Hong Kong) — Z-Image renders this register exceptionally well. For bilingual / Chinese-aesthetic seeds, prefer the **Bilingual** subsection (Wong Kar-wai, Shanghai poster art). **One anchor. Stacking two muddies the output.**
+
+4. **Add the off-center detail.** Exactly ONE small, hyper-specific, observed-feeling detail (band-aid on the knuckle, coffee ring on the upper-left of the placemat, one sleeve rolled higher than the other, bobby pin holding nothing in place). This is the master anti-generic rule. **Never skip it. Never include two.**
+
+5. **Light interaction (2–3 details).** Same as the standard Lighting section above. Don't just say *"golden hour"* — describe how the light interacts (rim from a low sun + dust motes in the air + dappled foreground shadows). For neon / retro seeds, draw from the palette's **neon-noir cluster** — magenta key + cyan rim + sodium-vapor amber bounce is the canonical Z-Image synthwave stack.
+
+6. **Environmental props (1–2 details)** if the scene has an environment. From the palette's **Environmental props** category — a prop that implies the subject was here before the camera arrived.
+
+7. **Strip slop tokens — variant-dependent rigor.** Generic quality adjectives (*beautiful, stunning, masterpiece, 8k, ultra-detailed, professional, atmospheric, moody, dramatic, epic, breathtaking, ethereal, magical*) and standalone *"cinematic"* must come out.
+
+   - **If targeting Z-Image Turbo:** strip with extra rigor. Turbo IGNORES negative prompts entirely (guidance_scale=0, no CFG), so every slop token in the positive contributes directly to the output. Delete them all; replace with concrete detail or remove.
+   - **If targeting Z-Image base or Omni:** negatives work. You can either delete slop from the positive (preferred) OR move it into the negative prompt where you have more headroom. Don't both delete and negate — pick one.
+
+8. **Audit.** Read the prompt back. Could this describe a photograph that actually exists, or does it still sound like a prompt? If the latter, swap one more generic phrase for a concrete one. Then verify: exactly one named anchor, exactly one off-center detail, role-token substituted if applicable.
+
+### Output format
+
+- **User pasted an existing prompt:** 1–2 sentence diagnosis → fixed prompt in a code block (with negative prompt if base/Omni) → bullet list of what changed and why, calling out the named-reference anchor, the off-center detail, and any role-token substitution explicitly.
+- **User gave a thin seed:** skip the diagnosis. Enhanced prompt in a code block → short bullet list of what you added and why, naming the anchor and the off-center detail (and the substitution if applicable).
+
+### Escape hatch
+
+When the seed already carries an unusual ingredient — *"Magritte-style bowler-hatted men raining from the sky"*, *"a Hopper diner reimagined underwater"*, *"a still life of broken neon signs"* — the rubric overconstrains. Keep the existing concept, add ONLY light interaction, one off-center detail, and one named-reference anchor. Don't pile on subject specifics that fight the surreal/abstract register. The bias-substitution rule still applies if a role token is present (an underwater Hopper diner still has *people* who shouldn't default to the stock register).
+
+### Edit-Mode sub-rubric (Z-Image-Edit and Omni)
+
+Z-Image-Edit takes a source image plus an instruction. The cascading-edit pattern (see the **Image editing** section below and Example 5) is the foundation. Layer the rubric on top:
+
+- **Bias-substitution applies on edits that introduce a new subject** (e.g. "add a doctor in the background") — substitute the same way you would in generation.
+- **The off-center detail is often the integration cue.** For a cascading edit (time-of-day flip, weather change, style transfer), the off-center detail is the small thing that ties the new state to the source: a half-melted ice cube in the same glass after the lights came on; a single wet leaf stuck to the windshield after the rain you just added; a coffee ring in the same upper-left of the table that survives the season change. The off-center detail also implicitly forces the model to match existing light direction, color cast, and surface texture, which is exactly what you want for invisible-edit quality.
+- **Named-reference anchors apply on style-transfer edits** ("re-render this in the register of Drive"). For appearance edits (change hair color, swap clothes), skip the anchor — anchoring will drift the look.
+- **Preservation language always comes last** and is non-negotiable: *"Keep [list]. Do not move, add, or remove any object."* See Example 5 for the canonical shape.
+
+See Examples 7 and 8 (below the existing examples) for the canonical Enhance Mode patterns.
 
 ## Length: 80–150 words for Turbo, slightly shorter for base
 
@@ -380,6 +435,45 @@ A three-quarter medium shot of an adult woman of Korean descent in her late twen
 
 What changed: replaced six generic quality adjectives with one strong style anchor (Saul Leiter documentary), added a specific subject ("Korean descent, late twenties") and action ("mid-laugh at something off-camera"), gave the scene a specific environment with foreground/midground/background, named the light setup concretely (window key from left + marble fill + pendant rim), specified camera (50mm at f/2), and added a cleanup clause.
 
+### Example 7 — Enhance Mode, thin seed with bias-substitution, Z-Image-Turbo
+
+User: *"a programmer at work"*
+
+Positive prompt:
+```
+A wide three-quarter shot of a South Asian woman software engineer in her early 30s standing at a standing desk in a converted-warehouse office, hands paused above a mechanical keyboard mid-thought, a faint smile pulling at one corner of her mouth as something on screen catches her. Her dark hair is in a messy bun secured with a yellow pencil holding nothing in place, and she's wearing a faded "PyCon 2019" T-shirt under Carhartt overalls with one strap unhooked. A chipped enamel mug of cold tea sits on the upper-left of the desk leaving a faint ring on a stack of printed papers, and three small succulents line the windowsill behind her monitor. Late afternoon side-light rakes through a tall warehouse window onto the left of her face, a warm amber bounce from a brick wall fills her right side, and cool blue screen-glow paints her hands and the underside of her chin. Editorial documentary photography in the register of Wolfgang Tillmans, 50mm lens at f/2.2, slight film grain, clean composition, no logos, no watermark.
+```
+
+**Params:** `num_inference_steps: 8`, `guidance_scale: 0.0`
+
+What was added:
+- **Bias-substitution (the headline move for Z-Image):** "a programmer" → South Asian woman software engineer, early 30s, messy bun, PyCon T-shirt under Carhartt overalls. Z-Image's default for "a programmer" is a white man in a hoodie with glasses in a dark room — the substitution from the palette's category 8 corrects that proactively, without asking the user.
+- **Off-center detail:** the yellow pencil in her bun holding nothing in place — observed, slightly absurd, signals "real working person" instantly.
+- **Named-reference anchor:** Wolfgang Tillmans documentary register (one anchor, not stacked).
+- **Light interaction (3 elements):** raking side-light through warehouse window + warm amber bounce off brick + cool blue screen-glow on hands and chin — three colors, three sources, all interacting with named surfaces.
+- **Environmental props:** chipped enamel mug + faint ring on printed papers + three succulents on the windowsill — the "subject was here before the camera arrived" layer.
+- **Slop stripped:** Turbo target means every slop token deleted (no "professional," no "8k," no standalone "cinematic"). Cleanup clause is positive ("clean composition, no logos, no watermark"), not a negative.
+
+### Example 8 — Enhance Mode, retro / synthwave thin seed, Z-Image-Turbo
+
+User: *"a city at night"*
+
+Positive prompt:
+```
+A low-angle wide shot looking down a rain-slick downtown street at 2am, neon signage from a noodle shop and an arcade reflected in long magenta and cyan streaks on the wet asphalt. A lone figure in a satin scorpion-print bomber crosses the foreground from right to left, his back to camera, hands deep in pockets — a single yellow pawn-shop ticket pinned to his sleeve and forgotten there. Steam rises from a manhole in the mid-ground, and a hand-painted Chinese sign reading "夜市" in elegant 行书 (xingshu) semi-cursive brushwork glows in warm amber above a doorway one block back. Hot magenta key from the noodle-shop neon on the left of the figure, cyan rim from a sign across the street picking out his right shoulder, sodium-vapor amber from a single streetlamp pooling on the asphalt ahead of him. Cinematic film still in the register of Newton Thomas Sigel on Drive, anamorphic 35mm with shallow depth of field, slight film grain, clean composition, no additional text, no watermark.
+```
+
+**Params:** `num_inference_steps: 8`, `guidance_scale: 0.0`
+
+What was added:
+- **Named-reference anchor (retro cluster):** Newton Thomas Sigel on Drive — the canonical neon-noir LA-night anchor from the palette's synthwave subsection. One anchor, not stacked with Blade Runner or Nagel.
+- **Off-center detail:** the yellow pawn-shop ticket pinned to his sleeve and forgotten there — small, observed, implies a story without telling one.
+- **Light interaction (neon-noir cluster, 3 elements):** magenta key + cyan rim + sodium-vapor amber — the canonical Z-Image synthwave stack, three sources, all interacting with named surfaces (left of figure, right shoulder, asphalt ahead).
+- **Environmental props:** steam rising from a manhole + neon reflections in wet asphalt + a Chinese sign one block back — three layers of "lived-in city."
+- **Bilingual text:** *"夜市"* (night market) in 行书 (xingshu) — Z-Image's bilingual rendering is genuinely solved, and adding one piece of CJK signage in the synthwave register is high-leverage when the seed is retro / neon.
+- **Wardrobe specificity:** satin scorpion-print bomber (Drive register) — the wardrobe doubles as a second pointer to the named anchor without re-naming it.
+- **Slop stripped:** zero generic quality adjectives in the positive (Turbo target).
+
 ## Pre-flight checklist
 
 Before returning the prompt, verify:
@@ -401,3 +495,8 @@ Before returning the prompt, verify:
 - [ ] Atmosphere/mood at the close
 - [ ] Recommended parameters noted
 - [ ] For NSFW: appropriate variant, `adult` modifier present, no-minors boundary maintained
+- [ ] **Exactly ONE named-reference anchor** (photographer / DOP / painter / illustrator / film) — never "cinematic" / "atmospheric" / "professional" as the anchor, never two anchors stacked
+- [ ] **Exactly ONE off-center detail** — the master anti-generic rule (band-aid on a knuckle, coffee ring on a placemat, one sleeve rolled higher, bobby pin holding nothing). Never zero, never two.
+- [ ] **If the seed contained a generic role token** (doctor / nurse / programmer / scientist / teacher / chef / firefighter / student / soldier / athlete / dancer / businessman / model / witch / etc.), the subject was proactively substituted from the bias-guard palette (Z-Image's defaults are unusually narrow — substitution is mandatory, not optional)
+- [ ] **If targeting Z-Image Turbo**, all slop tokens stripped from the positive prompt with extra rigor (Turbo ignores negative prompts — every slop token in the positive ships to the output)
+- [ ] If in Enhance Mode: opened `references/enrichment-palette.md` and picked 4–6 enrichments by scene-type

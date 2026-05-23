@@ -74,19 +74,36 @@ curl -s http://127.0.0.1:8188/mcp_bridge/debug | jq '{tab_count: (.tabs|length)}
 
 ### 3. Wire into Claude Code
 
-Point at the entry-point script directly — **not** `uv run`, which prints status to stdout and corrupts the JSON-RPC stream:
+Point at the entry-point script directly — **not** `uv run`, which prints status to stdout and corrupts the JSON-RPC stream.
+
+**Recommended: project-scoped `.mcp.json`** in your ComfyUI directory. Loads only when you start Claude Code from inside `<ComfyUI>/`, keeps the global config clean:
 
 ```bash
-claude mcp add comfyui -s user -- /path/to/comfyui-mcp/.venv/bin/comfyui-mcp
+cat > /path/to/ComfyUI/.mcp.json <<'EOF'
+{
+  "mcpServers": {
+    "comfyui": {
+      "type": "stdio",
+      "command": "/path/to/comfyui-mcp/venv/bin/comfyui-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+EOF
 ```
 
-Or, if you prefer the conda env:
+(Use the conda env's `comfyui-mcp` binary instead if you installed there.)
+
+First time you start Claude Code in `<ComfyUI>/`, it will prompt you to approve the project MCP servers — accept once.
+
+**Alternative: user-scope** if you want comfyui-mcp available everywhere:
 
 ```bash
-claude mcp add comfyui -s user -- /path/to/conda/envs/<env>/bin/comfyui-mcp
+claude mcp add comfyui -s user -- /path/to/comfyui-mcp/venv/bin/comfyui-mcp
 ```
 
-Restart Claude Code. `/mcp` should show `comfyui · ✔ connected`.
+In both cases, restart Claude Code. `/mcp` should show `comfyui · ✔ connected`.
 
 ## Configuration
 
@@ -304,29 +321,40 @@ The repo ships Claude Code Skills under `skills/`. Two flavors:
 
 | Skill | Purpose | Output |
 |---|---|---|
-| `prompt-flux` | Prompts for Flux, Flux2, Flux Dev/Schnell | natural-language prompt (no negatives) |
-| `prompt-illustrious` | Prompts for Illustrious XL, Pony Diffusion V6 XL, NoobAI, Hassaku XL, generic SDXL danbooru fine-tunes | comma-separated tag prompt + negative |
-| `prompt-qwen` | Prompts for Qwen Image | natural-language prompt + negative; excellent text rendering (English + Chinese) |
-| `prompt-zimage` | Prompts for Z-Image, Z-Image Turbo | long camera-style prose (no negatives — Z-Image ignores them) |
+| `prompt-flux` | Prompts for Flux 1 (Dev/Pro/Schnell), Flux 2 (Pro/Max/Flex/Dev/Klein), and Flux NSFW LoRAs. Includes **Enhance Mode** with a structured rubric (named-reference anchor + off-center detail + scene-typed enrichment palette) for turning thin seeds like *"a girl in a forest"* into specific, non-generic prompts. | natural-language prompt (no negatives) |
+| `prompt-illustrious` | Prompts for Illustrious XL, Pony Diffusion V6 XL, NoobAI, Hassaku XL, generic SDXL danbooru fine-tunes. Backed by a snapshot of high-post-count danbooru general tags. | comma-separated tag prompt + negative |
+| `prompt-qwen` | Prompts for Qwen Image 1.0 / 2.0 / Edit. Excellent text rendering (English + Chinese) and unified gen+edit. | natural-language prompt + negative |
+| `prompt-zimage` | Prompts for Z-Image base / Turbo / Omni / Edit. Bilingual, retro/synthwave-friendly. Turbo ignores negatives — the skill handles that. | long camera-style prose |
+| `prompt-wan` | Prompts for Wan 2.1 → 2.7 (Alibaba video). Handles the structural shift between Wan 2.2 (single-sentence) and Wan 2.6+ (shot-block with timecodes), plus 2.7 multi-reference / brand-color placement. | structured video prompt |
+| `prompt-ltx` | Prompts for LTX Video 2B/13B, LTX-2, LTX-2.3 (Lightricks). Uses the official 7-component structure; handles A2V audio-locking and the divisible-by-32 resolution constraint. | structured video prompt |
 
 **Workflow-engineering skills** — diagnose and fix image quality issues, with concrete recipes from real iteration sessions.
 
 | Skill | Purpose |
 |---|---|
-| `comfyui-image-quality` | Diagnose + fix face/body color mismatch, broken hands, AI-looking skin, anatomy artifacts. Includes a diagnostic checklist, 5 validated fix recipes (FaceDetailer tune, hand detailer, anti-AI postprocess, single-KSampler collapse, UltimateSDUpscale), and an inpaint failure-mode checklist (mask seam, phantom limb, two-halves break, etc). Forces verification BEFORE declaring success. |
+| `comfyui-image-quality` | Diagnose + fix face/body color mismatch, broken hands, AI-looking skin, anatomy artifacts. Diagnostic checklist, 5 validated fix recipes (FaceDetailer tune, hand detailer, anti-AI postprocess, single-KSampler collapse, UltimateSDUpscale), and an inpaint failure-mode checklist. Forces verification BEFORE declaring success. |
 | `comfyui-mask-strategy` | Pick the right mask source BEFORE wiring up an inpaint pass. Decision table across YOLO bbox / SEGS combined / CLIPSeg / pose-keypoint polyline / manual paint. Includes the keypoint→polyline recipe (with PIL code), CLIPSeg pitfalls, and the mask-batch-vs-mask gotcha. |
+| `comfyui-pose-editing` | Recipes for changing or repairing a subject's pose using ControlNet / OpenPose preprocessors + inpaint, including keypoint hand-edit patterns. |
 
 ### Install (symlink so edits flow through immediately)
 
+**Recommended: project-scoped** — pairs with the project `.mcp.json` so skills and MCP both load only when you start Claude Code in `<ComfyUI>/`. One symlink covers every current and future skill in the repo:
+
+```bash
+mkdir -p /path/to/ComfyUI/.claude
+ln -s /path/to/comfyui-mcp/skills /path/to/ComfyUI/.claude/skills
+```
+
+**Alternative: user-scope** — makes the skills available everywhere (not just in `<ComfyUI>/`):
+
 ```bash
 mkdir -p ~/.claude/skills
-for s in prompt-flux prompt-illustrious prompt-qwen prompt-zimage \
-         comfyui-image-quality comfyui-mask-strategy; do
-    ln -s /path/to/comfyui-mcp/skills/$s ~/.claude/skills/$s
+for d in /path/to/comfyui-mcp/skills/*/; do
+    ln -s "$d" ~/.claude/skills/
 done
 ```
 
-After this, restart Claude Code. The skills are invokable as `/prompt-flux`, `/prompt-illustrious`, etc.
+After either, restart Claude Code. The skills are invokable as `/prompt-flux`, `/prompt-illustrious`, etc.
 
 ### Usage
 
@@ -335,6 +363,8 @@ After this, restart Claude Code. The skills are invokable as `/prompt-flux`, `/p
 > /prompt-illustrious pony, muscular girl with red skin and glasses
 > /prompt-qwen vintage cafe with bilingual sign
 > /prompt-zimage athletic woman running at sunrise
+> /prompt-wan a sword fight under autumn maples, Wan 2.6 shot-block
+> /prompt-ltx an espresso machine pulling a shot, LTX-2.3 with audio
 ```
 
 The skill returns a ready-to-paste prompt (and negative if applicable). Combine with the MCP tools:
@@ -368,23 +398,35 @@ with open('skills/prompt-illustrious/tags.txt','w') as f:
 ```
 comfyui-mcp/
 ├── pyproject.toml
-├── README.md          # this file
+├── README.md            # this file
+├── CLAUDE.md            # agent-facing context for Claude Code
 ├── src/comfyui_mcp/
 │   ├── __init__.py
-│   ├── comfy.py       # thin client (httpx + websockets)
-│   └── server.py      # FastMCP server, all 42 tools
-└── skills/            # Claude Code Skills, symlink into ~/.claude/skills/
-    ├── prompt-flux/SKILL.md
-    ├── prompt-illustrious/{SKILL.md, tags.txt}
-    ├── prompt-qwen/SKILL.md
-    ├── prompt-zimage/SKILL.md
+│   ├── server.py        # all 42 @mcp.tool() entry points
+│   ├── client.py        # shared singleton ComfyClient
+│   ├── comfy.py         # httpx + websockets wrapper over ComfyUI REST/WS
+│   ├── core.py          # _comfy_root, _detect_format, _resolve_node_path, _subgraph_def
+│   ├── tabs.py          # _workflow_from_tab, _queue_and_enrich (open-tab path)
+│   ├── widgets.py       # widget read/write helpers
+│   ├── summarize.py     # graph-summary helpers
+│   ├── snapshots.py     # pre-apply snapshot save/restore
+│   ├── search.py        # search_nodes, search-related helpers
+│   ├── model_meta.py    # describe_model, model metadata
+│   ├── images.py        # image / preview helpers
+│   └── logs.py          # tail_log, log helpers
+├── custom_nodes/comfyui-mcp-bridge/
+│   ├── __init__.py      # registers HTTP routes + middleware on ComfyUI
+│   └── web/mcp_bridge.js  # ComfyUI editor extension (JS, v0.9.0)
+└── skills/              # Claude Code Skills — symlink into <ComfyUI>/.claude/skills/
+    ├── prompt-flux/{SKILL.md, references/*.md}
+    ├── prompt-illustrious/{SKILL.md, SKILL-pony.md, tags.txt, refs/, extract_danbooru_tag.py}
+    ├── prompt-qwen/{SKILL.md, references/*.md}
+    ├── prompt-zimage/{SKILL.md, references/*.md}
+    ├── prompt-wan/{SKILL.md, references/*.md}
+    ├── prompt-ltx/{SKILL.md, references/*.md}
     ├── comfyui-image-quality/SKILL.md
-    └── comfyui-mask-strategy/SKILL.md
-
-<ComfyUI>/custom_nodes/comfyui-mcp-bridge/
-├── __init__.py        # registers HTTP routes + middleware
-└── web/
-    └── mcp_bridge.js  # ComfyUI editor extension (JS, v0.9.0)
+    ├── comfyui-mask-strategy/SKILL.md
+    └── comfyui-pose-editing/SKILL.md
 ```
 
 ## License

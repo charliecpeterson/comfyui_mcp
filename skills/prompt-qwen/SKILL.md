@@ -30,12 +30,13 @@ See `references/model-variants.md` for deeper detail on each variant and routing
 
 Qwen's strengths are text and editing, so the references concentrate there:
 
+- `references/enrichment-palette.md` — the categorized menu for **Enhance Mode**: subject specifics, body modifications (tattoos/piercings/scars), accessories, wardrobe, environmental props, light interaction, named-reference anchors, text & signage enrichment, and the off-center-detail rule. **Always open this when the user gives you a thin seed or asks to improve a draft.**
 - `references/text-rendering-patterns.md` — patterns for posters, signage, slides, infographics, menus, packaging. The killer-feature reference. Open this any time the prompt involves text.
 - `references/editing-instructions.md` — how to write Qwen Edit instructions for semantic edits, view rotation, multi-image fusion, and text overlay. Open this whenever the user wants to modify an existing image.
 - `references/bilingual-and-multilingual.md` — Chinese text rendering, bilingual layouts, mixed-language patterns.
 - `references/model-variants.md` — full variant catalogue with parameter and routing notes.
 
-You don't need to open these for every prompt. Reach for them when the task involves text, editing, multiple languages, or you need variant-specific guidance.
+You don't need to open these for every prompt. Reach for them when the task involves text, editing, multiple languages, you need variant-specific guidance, or you're in Enhance Mode (always open `enrichment-palette.md`).
 
 ## Output requirement
 
@@ -60,6 +61,61 @@ After the code blocks, add a one-line note on **recommended parameters** if they
 - Text-heavy work: `guidance_scale: 4.5–5.0` (lean higher), `steps: 28–50`
 
 No JSON, no preamble inside the blocks.
+
+## Enhance Mode — thin seeds and improvement requests
+
+**Enhance Mode fires when either:**
+
+- (a) the user pastes an existing prompt and asks to fix / improve / enhance it, OR
+- (b) the seed is a short undifferentiated phrase like *"a girl in a forest"*, *"cyberpunk city"*, *"fantasy castle"*, *"a man drinking coffee"*, *"a cafe scene at night"*.
+
+Both go through the same rubric. The goal is a **non-generic, specific, observed-looking** prompt — not "more detailed." More detail without specificity just makes a longer mediocre prompt.
+
+**Always open `references/enrichment-palette.md` when in Enhance Mode.** That file is the menu you pick from. Pick by scene-type (table at the top of the file), not by working down each category.
+
+### The rubric — run in one pass, in order
+
+1. **Diagnose** (1–2 sentences). What's missing? Likely: no specific subject, no action, no named-reference anchor, no light interaction, generic adjective stack, no concrete environmental prop, no off-center detail, slop terms sitting in the positive that belong in the negative. Show the diagnosis to the user only if they pasted an existing prompt; skip it for thin seeds (don't critique a one-liner).
+
+2. **Specify the subject.** Replace "a woman" / "a man" / "a person" with 1–3 concrete facts drawn from the palette's **Subject specifics + Body modifications + Accessories + Wardrobe** categories. 4–6 specific facts beats 12 generic ones — don't pile on.
+
+3. **Anchor the style with ONE named reference.** From the palette's **Named-reference anchors** (which includes the bilingual / editorial / poster anchors when relevant). *"Editorial photography in the register of Saul Leiter"* or *"Bold flat-color poster in the register of Saul Bass"* — anchor to a real visual register, never to *"cinematic"* / *"professional"* / *"atmospheric"* alone. **One anchor. Stacking two muddies the output.**
+
+4. **Add the off-center detail.** Exactly ONE small, hyper-specific, observed-feeling detail (band-aid on the knuckle, coffee ring on the upper-left of the placemat, one sleeve rolled higher than the other, bobby pin holding nothing in place). This is the master anti-generic rule. **Never skip it. Never include two.** For Qwen Edit, the off-center detail is often the *integration cue* (matching shadow direction, color cast of existing light).
+
+5. **Light interaction (2–3 details).** Same as the standard Lighting section. Don't just say *"golden hour"* — describe how the light interacts (rim from a low sun + dust motes in the air + dappled foreground shadows).
+
+6. **Environmental props (1–2 details)** if the scene has an environment. From the palette's **Environmental props** category — a prop that implies the subject was here before the camera arrived. For text / poster work, the palette's **Text & signage enrichment** (category 8) replaces this step — pick font family + placement + material cue + (if bilingual) layout cue.
+
+7. **Strip slop tokens** — and route them correctly. Remove generic quality adjectives (*beautiful, stunning, masterpiece, 8k, ultra-detailed, professional, atmospheric, moody, dramatic, epic, breathtaking, ethereal, magical*) and standalone *"cinematic"* from the positive prompt. Replace each with concrete detail or remove. **Qwen-specific:** Qwen DOES support negative prompts, so terms like *"low quality, blurry, watermark, signature"* belong in the **negative** prompt, not the positive. Positive-side slop adjectives still get stripped just like in Flux — putting "stunning" in the negative doesn't help either.
+
+8. **Audit.** Read the prompt back. Could this describe a photograph (or designed artifact) that actually exists, or does it still sound like a prompt? If the latter, swap one more generic phrase for a concrete one.
+
+### Edit-Mode sub-rubric (Qwen Image Edit)
+
+When the user wants to **modify an existing image** (Qwen Image Edit), the rubric shifts. Qwen's unified gen+edit is a major differentiator, and edit prompts that follow the standard gen rubric overcook the result.
+
+1. **Don't restate the whole subject.** The source image already carries the subject. Name only what the edit touches and what must be preserved.
+2. **Apply ONE modification.** Stacking two edits in one prompt (recolor hair AND change background) regresses both. Run them as two passes.
+3. **Preserve list.** Explicitly enumerate what stays unchanged — pose, expression, facial features, background, lighting direction. Without this, Qwen Edit drifts on unintended elements.
+4. **The off-center detail becomes the integration cue.** This is the Edit-Mode equivalent of the master rule: ONE explicit cue that integrates the edit into the existing scene — shadow direction consistent with existing shadows, color cast matching the existing light (warm tungsten / cool daylight / neon green), sizing relative to a named anchor in the source image, and surface contact (where the new object touches the surface beneath, the small shadow there). Without this, Qwen Edit pastes the new element flat and the result reads as a sticker.
+5. **Strip slop.** Same as step 7 above. Edits don't need "beautiful" or "professional" — they need precise diff language.
+
+### Length guidance in Enhance Mode
+
+Qwen Image 2.0's sweet spot for Enhance Mode output is **30–110 words**. Simple seeds land near the low end; subject + named anchor + 2–3 lighting details + off-center detail + one environmental prop routinely lands around 80–110 words and that's fine. Text-heavy / poster work can go longer using the full 1000-token budget — but every sentence still has to add information. For Qwen Image 1.0, stay closer to 30–60 words. For Qwen Image Edit, keep it surgical regardless (typically 40–90 words).
+
+### Output format
+
+- **User pasted an existing prompt:** 1–2 sentence diagnosis → positive prompt in a code block → negative prompt in a code block → recommended params line → short bullet list of what changed and why, naming the named-reference anchor and the off-center detail (or integration cue) explicitly.
+- **User gave a thin seed:** skip the diagnosis. Positive prompt → negative prompt → params line → short bullet list of what you added and why, naming the anchor and the off-center detail.
+- **User wants an edit:** one code block with the surgical edit instruction → params line → short bullet list noting the preserve list and the integration cue.
+
+### Escape hatch
+
+When the seed already carries an unusual ingredient — *"Magritte-style bowler-hatted men raining from the sky"*, *"a Hopper diner reimagined underwater"*, *"a still life of broken neon signs"* — the rubric overconstrains. Keep the existing concept, add ONLY light interaction, one off-center detail, and one named-reference anchor. Don't pile on subject specifics that fight the surreal/abstract register.
+
+See Examples 7, 8, and 9 for the canonical patterns.
 
 ## Core framework
 
@@ -344,21 +400,69 @@ blurry, low quality, distorted, watermark, signature
 
 What changed: replaced 6 generic quality adjectives with one strong style anchor (Saul Leiter documentary), added a specific subject and action ("halfway through a sentence and laughing"), specified light (window from the left, catching steam), specified camera (50mm at f/2), named the mood concretely.
 
+### Example 8 — Enhance Mode, thin seed with bilingual signage, Qwen Image 2.0
+
+User: *"a cafe scene at night"*
+
+Positive:
+```
+A narrow corner cafe on a side street just past 10pm, a man in his fifties in a slightly oversized wool overcoat — collar turned up against the cold, a single grey hair caught on his lapel — leaning at the counter mid-conversation with the barista. The enamel sign over the door reads "永和咖啡" in bold red 楷书 with "YONGHE COFFEE" beneath in smaller hand-painted serif, the enamel chipped at one bolt hole with a faint trail of rust bleeding down toward the door frame. Editorial street photography in the register of Saul Leiter, 50mm at f/2, warm tungsten from inside the cafe spilling onto the wet sidewalk, a single cool sodium-vapor streetlight from the opposite side catching the steam rising off two cups on the counter, the reflection of a neon sign across the street pooling pink in the puddle by the doorway.
+```
+
+Negative:
+```
+blurry, low quality, distorted, watermark, signature, garbled text, misspelled text
+```
+
+**Params:** `guidance_scale: 4.8`, `num_inference_steps: 35`
+
+What was added:
+- **Named-reference anchor:** Saul Leiter editorial street register (one anchor).
+- **Subject specifics:** age, oversized wool overcoat with collar turned up, single grey hair on lapel (subject + wardrobe).
+- **Off-center detail:** the chipped bolt hole on the enamel sign with rust bleeding down — observed, doubles as the page-level imperfection for the signage element.
+- **Text & signage enrichment:** bilingual layout with 楷书 Chinese above + smaller hand-painted serif English below, enamel-on-metal material cue, placement and hierarchy explicit.
+- **Light interaction (3 elements):** warm tungsten from inside + cool sodium-vapor from the opposite side + neon pink reflection in the puddle.
+- **Camera:** 50mm at f/2 — concrete, no "cinematic."
+
+### Example 9 — Enhance Mode, Qwen Image Edit, add object
+
+User: *"I have an existing image with the prompt 'a woman reading on a park bench.' Can you add a small dog next to her?"*
+
+This is Edit Mode — apply the Edit-Mode sub-rubric. Don't restate the woman; describe only the dog, what's preserved, and the integration cue.
+
+Instruction:
+```
+Add a small scruffy terrier sitting on the park bench directly to the woman's right, leaning gently against her thigh and looking up at her book, sized roughly to reach her hip when seated. The dog should have a worn red collar with a single brass tag and one ear flopped slightly forward. Match the integration carefully: the dog's shadow falls in the same direction and softness as the woman's existing shadow on the bench, the warm/cool color cast on its coat matches the existing lighting in the source image, and the contact shadow where it touches the bench slats is soft and consistent with how she sits. Keep everything else identical — the woman's pose, expression, the book she's reading, her clothing, the bench itself, the surrounding park, foliage, ground texture, and all existing lighting and shadows should remain exactly as in the source.
+```
+
+**Params:** `guidance_scale: 3.5`, `num_inference_steps: 30`
+
+What's worth noticing:
+- **Preserve list explicit:** the woman, the book, her pose, the bench, the park, all original lighting and shadows.
+- **One modification:** add the dog. Not "add a dog and change her hair." Stacking edits regresses both.
+- **Integration cue as the off-center detail:** shadow direction matching the existing shadow + color-cast match + soft contact shadow on the bench slats. This is the Edit-Mode equivalent of the band-aid-on-the-knuckle — without it the dog reads as pasted-on.
+- **Sizing reference:** "roughly to reach her hip when seated" — anchored to a named element in the source image, not abstract scale.
+- **One observed detail on the new element:** the worn red collar with a single brass tag and one ear flopped forward — keeps the dog from looking generic without piling on multiple details that would compete with the integration cue.
+
 ## Pre-flight checklist
 
 Before returning the prompt, verify:
 
 - [ ] Identified target variant (Qwen Image 1.0, 2.0, or Edit) and tuned length and structure accordingly
 - [ ] Subject is specific and DOING something — not just standing
+- [ ] **Exactly ONE named-reference anchor** (photographer / DOP / painter / illustrator / film / poster designer) — never "cinematic" / "atmospheric" / "professional" as the anchor, never two anchors stacked
+- [ ] **Exactly ONE off-center detail** — the master anti-generic rule (band-aid on a knuckle, coffee ring on a placemat, chipped bolt-hole on a sign, integration cue for edits). Never zero, never two.
 - [ ] One clear style direction, not a stack of competing styles
 - [ ] 2–3 lighting details that describe interaction with the scene
 - [ ] Length matches the task (1–3 sentences for general, up to 1000 tokens for text-heavy, surgical for edits)
 - [ ] All exact text wrapped in double quotation marks
 - [ ] Text placement described (top, centered, below, etc.) for multi-element layouts
 - [ ] For bilingual: each language's text in its own quoted block, script style specified
-- [ ] For edits: explicit about what changes AND what's preserved
-- [ ] No filler adjectives — neither the quality stack (beautiful, amazing, masterpiece, 8k, professional, ultra-detailed) nor the register stack (atmospheric, moody, dramatic, epic, ethereal, magical, cinematic as standalone)
+- [ ] For edits: explicit about what changes AND what's preserved, with an integration cue (shadow direction, color cast, surface contact, sizing reference)
+- [ ] **Negatives used appropriately** — slop terms like "low quality, blurry, watermark, signature" moved to the negative prompt; positive prompt is free of them. Quality-adjective slop ("beautiful, stunning, masterpiece, 8k") is stripped entirely, NOT moved to the negative.
+- [ ] No filler adjectives in the positive — neither the quality stack (beautiful, amazing, masterpiece, 8k, professional, ultra-detailed) nor the register stack (atmospheric, moody, dramatic, epic, ethereal, magical, cinematic as standalone)
 - [ ] No contradictory style mashups
 - [ ] Negative prompt is short
 - [ ] Recommended `guidance_scale` and `num_inference_steps` noted when text or detail fidelity matters
+- [ ] If in Enhance Mode: opened `references/enrichment-palette.md` and picked 4–6 enrichments by scene-type
 - [ ] For NSFW: appropriate variant noted; safety boundary on minors maintained

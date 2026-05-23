@@ -31,12 +31,13 @@ See `references/model-variants.md` for deeper detail on each variant's quirks an
 
 Flux skills don't get a tag taxonomy — Flux doesn't think in tags. What we do have:
 
-- `references/specificity-upgrades.md` — vague phrase → specific phrase swaps. The single biggest leverage for prompt quality. Open this when you catch yourself writing generic adjectives.
+- `references/enrichment-palette.md` — the categorized menu for **Enhance Mode**: subject specifics, body modifications (tattoos/piercings/scars), accessories, wardrobe, environmental props, light interaction, named-reference anchors, and the off-center-detail rule. **Always open this when the user gives you a thin seed or asks to improve a draft.**
+- `references/specificity-upgrades.md` — vague phrase → specific phrase swaps. Open when you catch yourself writing generic adjectives, even outside Enhance Mode.
 - `references/cinematography.md` — real cinema/photography vocabulary. Lens choices, lighting setups, named looks. Use when describing camera, light, and color.
 - `references/anti-ai-slop.md` — Flux-specific AI tells and how to avoid them. Open when reviewing a draft.
 - `references/model-variants.md` — full variant catalogue with use-case routing and NSFW handling.
 
-You don't need to open these for every prompt. Reach for them when (a) a specific decision in the current prompt needs them, or (b) the pre-flight checklist flags a gap.
+You don't need to open these for every prompt. Reach for them when (a) a specific decision in the current prompt needs them, (b) the pre-flight checklist flags a gap, or (c) you're in Enhance Mode (always open `enrichment-palette.md`).
 
 ## Output requirement
 
@@ -46,13 +47,45 @@ If the user wants both a "short" and a "detailed" version, produce both, clearly
 
 If the user requested a variant other than the default and you switched to a different one for any reason, say so in one sentence before the code block.
 
-**When the user pastes an existing prompt and asks to fix / improve / enhance it**, change the output format:
+## Enhance Mode — thin seeds and improvement requests
 
-1. Lead with a 1–2 sentence diagnosis naming the concrete problems (generic adjectives, negation phrases, missing subject, no light interaction, stacked styles, etc.).
-2. The fixed prompt in a single code block.
-3. A short bullet list of what changed and why.
+**Enhance Mode fires when either:**
 
-See Example 5 for the canonical pattern.
+- (a) the user pastes an existing prompt and asks to fix / improve / enhance it, OR
+- (b) the seed is a short undifferentiated phrase like *"a girl in a forest"*, *"cyberpunk city"*, *"fantasy castle"*, *"a man drinking coffee"*.
+
+Both go through the same rubric. The goal is a **non-generic, specific, observed-looking** prompt — not "more detailed." More detail without specificity just makes a longer mediocre prompt.
+
+**Always open `references/enrichment-palette.md` when in Enhance Mode.** That file is the menu you pick from. Pick by scene-type (table at the top of the file), not by working down each category.
+
+### The rubric — run in one pass, in order
+
+1. **Diagnose** (1–2 sentences). What's missing? Likely: no specific subject, no action, no named-reference anchor, no light interaction, generic adjective stack, negation phrases, no concrete environmental prop, no off-center detail. Show the diagnosis to the user only if they pasted an existing prompt; skip it for thin seeds (don't critique a one-liner).
+
+2. **Specify the subject.** Replace "a woman" / "a man" / "a person" with 1–3 concrete facts drawn from the palette's **Subject specifics + Body modifications + Accessories + Wardrobe** categories. 4–6 specific facts beats 12 generic ones — don't pile on.
+
+3. **Anchor the style with ONE named reference.** From the palette's **Named-reference anchors**. *"Fashion editorial in the register of Petra Collins"* or *"Cinematic still in the register of Roger Deakins on Blade Runner 2049"* — anchor to a real visual register, never to *"cinematic"* / *"professional"* / *"atmospheric"* alone. **One anchor. Stacking two muddies the output.**
+
+4. **Add the off-center detail.** Exactly ONE small, hyper-specific, observed-feeling detail (band-aid on the knuckle, coffee ring on the upper-left of the placemat, one sleeve rolled higher than the other, bobby pin holding nothing in place). This is the master anti-generic rule. **Never skip it. Never include two.**
+
+5. **Light interaction (2–3 details).** Same as the standard Lighting section. Don't just say *"golden hour"* — describe how the light interacts (rim from a low sun + dust motes in the air + dappled foreground shadows).
+
+6. **Environmental props (1–2 details)** if the scene has an environment. From the palette's **Environmental props** category — a prop that implies the subject was here before the camera arrived.
+
+7. **Strip slop tokens.** Remove generic quality adjectives (*beautiful, stunning, masterpiece, 8k, ultra-detailed, professional, atmospheric, moody, dramatic, epic, breathtaking, ethereal, magical*) and standalone *"cinematic"*. Replace each with concrete detail or remove.
+
+8. **Audit.** Read the prompt back. Could this describe a photograph that actually exists, or does it still sound like a prompt? If the latter, swap one more generic phrase for a concrete one.
+
+### Output format
+
+- **User pasted an existing prompt:** 1–2 sentence diagnosis → fixed prompt in a code block → bullet list of what changed and why, ideally calling out the named-reference anchor and the off-center detail explicitly.
+- **User gave a thin seed:** skip the diagnosis. Enhanced prompt in a code block → short bullet list of what you added and why, naming the anchor and the off-center detail.
+
+### Escape hatch
+
+When the seed already carries an unusual ingredient — *"Magritte-style bowler-hatted men raining from the sky"*, *"a Hopper diner reimagined underwater"*, *"a still life of broken neon signs"* — the rubric overconstrains. Keep the existing concept, add ONLY light interaction, one off-center detail, and one named-reference anchor. Don't pile on subject specifics that fight the surreal/abstract register.
+
+See Examples 5, 6, and 7 for the canonical patterns.
 
 ## Core framework: Subject → Action → Style → Context
 
@@ -260,18 +293,25 @@ Output:
 A weary knight in dented steel armor trudging through a heavy snowstorm at twilight, cloak whipping in the wind. Painterly fantasy illustration, low contrast blue-grey palette with a small warm glow from a lantern in his left hand. Wide shot, snow streaks crossing the frame diagonally.
 ```
 
-### Example 5 — existing prompt improvement, Flux 2 Pro
+### Example 5 — Enhance Mode, existing-prompt improvement, Flux 2 Pro
 
-User: "Can you fix this Flux prompt? 'beautiful woman in dress in a field, 8k, masterpiece, ultra detailed, professional, cinematic'"
+User: *"Can you fix this Flux prompt? 'beautiful woman in dress in a field, 8k, masterpiece, ultra detailed, professional, cinematic'"*
 
-Diagnosis: generic adjective stack (beautiful, masterpiece, ultra-detailed, professional, cinematic), no specific subject, no action, no light, no style anchor, "8k" does nothing on Flux.
+Diagnosis: generic adjective stack (beautiful, masterpiece, ultra-detailed, professional, cinematic), no specific subject, no action, no named-reference anchor, no light interaction, no environmental detail, no off-center detail. *"8k"* does nothing on Flux.
 
 Output:
 ```
-A woman in her early thirties with sun-bleached blonde hair tied back loosely, walking knee-deep through a field of late-summer wheat at golden hour, the long dress she's wearing — pale linen, slightly oversized — catching the breeze and the sideways light. Fashion editorial photography in the style of Petra Collins, 85mm portrait lens at f/2, warm rim-light from a low sun behind her, dust motes visible in the air. The mood is unposed and slightly melancholy.
+A woman in her late thirties with sun-bleached blonde hair tied back loosely and a single bobby pin holding nothing in place, walking knee-deep through a field of late-summer wheat at golden hour. The dress she's wearing — pale linen, slightly oversized, one sleeve rolled higher than the other — catches the breeze and the sideways light, and a small band-aid is visible on her left knuckle. Fashion editorial photography in the register of Petra Collins, 85mm portrait lens at f/2, warm rim-light from a low sun behind her with dust motes visible in the air, foreground stalks of wheat in soft focus. The mood is unposed and slightly melancholy.
 ```
 
-What changed: replaced 6 generic quality adjectives with one strong style anchor (Petra Collins editorial), added a specific subject and action, mixed three lighting details (golden hour + sideways light + rim from low sun), added a sensory imperfection (dust motes), specified camera (85mm at f/2), and named the mood concretely.
+What changed:
+- **Named-reference anchor:** one strong anchor (*"in the register of Petra Collins"*) replacing 6 generic quality adjectives.
+- **Subject specifics:** age, sun-bleached blonde hair, bobby pin, mismatched rolled sleeves.
+- **Off-center detail:** the band-aid on the left knuckle — the single most important non-generic addition.
+- **Wardrobe specificity:** pale linen, slightly oversized, asymmetric sleeve roll.
+- **Light interaction (3 elements):** golden hour + sideways light + warm rim from low sun + dust motes — interacting with the scene, not stacked adjectives.
+- **Layered depth:** foreground wheat in soft focus.
+- **Mood named concretely** instead of *"cinematic"*.
 
 ### Example 6 — Flux 2 Flex, flat-lay poster with text
 
@@ -284,19 +324,38 @@ A vintage screen-printed flyer with bold hand-painted serif letters reading "BRI
 
 What's worth noticing: text in double quotes with font (hand-painted serif), ink color (indigo), and placement (upper third) front-loaded; one style anchor (mid-century screenprint poster); flat-lay framing made explicit (flat on a table, photographed from directly above); page-level imperfections (deckled edges, creased corner, off-registration) instead of 3D-scene imperfections.
 
+### Example 7 — Enhance Mode, thin seed, Flux 2 Pro
+
+User: *"a man drinking coffee"*
+
+Output:
+```
+A man in his early forties at a window-side diner counter, mid-bite into a triangle of buttered toast while a chipped ceramic mug of black coffee steams beside him. He's wearing a faded oxford-cloth button-down with the cuffs rolled twice, a small ink stain along the side of his right index finger, and a thin pale scar through his left eyebrow. Late afternoon side-light through the diner window in the register of Edward Hopper, but pulled toward documentary photography — the steam from the mug crosses through the sunbeam, and a coffee ring on the upper-left of the placemat from the cup before this one suggests he's been here longer than the photo implies. 50mm lens at f/2.8, slight grain of color negative film, the booth's red vinyl just out of focus behind him.
+```
+
+What was added:
+- **Named-reference anchor:** Edward Hopper register, deliberately pulled toward documentary — one anchor, even though two registers are gently combined (the second is qualitative, not a second name-drop).
+- **Subject specifics:** age, posture (mid-bite, not just "drinking"), oxford-cloth button-down with rolled cuffs (wardrobe specificity), ink stain on the index finger, scar through the brow (body-mod-adjacent).
+- **Off-center detail:** the coffee ring on the upper-left of the placemat from a previous cup — implies the subject has been at the counter longer than the moment of the photo. Observed, not invented.
+- **Light interaction (3 elements):** late-afternoon side-light + steam from the mug crossing the sunbeam + the booth's red vinyl in soft focus.
+- **Environmental prop:** the placemat coffee ring doubles as the off-center detail and the environmental prop.
+- **Camera:** 50mm at f/2.8 + color negative grain — concrete instead of "cinematic."
+
 ## Pre-flight checklist
 
 Before returning the prompt, verify:
 
 - [ ] Identified target variant (Flux 1 Dev/Pro/Schnell, Flux 2 Pro/Max/Flex/Dev/Klein, or NSFW path) and tuned length accordingly
 - [ ] Subject is specific and DOING something — not just standing
-- [ ] One clear style direction, not a stack of competing styles
+- [ ] **Exactly ONE named-reference anchor** (photographer / DOP / painter / illustrator / film) — never "cinematic" / "atmospheric" / "professional" as the anchor, never two anchors stacked
+- [ ] **Exactly ONE off-center detail** — the master anti-generic rule (band-aid on a knuckle, coffee ring on a placemat, one sleeve rolled higher, bobby pin holding nothing). Never zero, never two.
 - [ ] 2–3 lighting details that interact with the scene (sourced from `references/cinematography.md` if needed)
-- [ ] At least one unexpected/specific detail that elevates beyond stock (from `references/specificity-upgrades.md` if needed)
+- [ ] At least one unexpected/specific detail beyond stock (from `references/enrichment-palette.md` or `references/specificity-upgrades.md`)
 - [ ] No negation phrases — only positives
 - [ ] No generic quality adjectives ("beautiful", "stunning", "masterpiece", "8k", "ultra-detailed", "professional", "cinematic" as a standalone, "atmospheric", "moody", "dramatic", "epic", "breathtaking", "ethereal", "magical")
 - [ ] Text wrapped in double quotes if applicable, with font/placement described
 - [ ] Length matches variant (Schnell/Klein: short; Flux 2 Pro: medium-long OK)
 - [ ] At least one imperfection / human detail / sensory anchor to break the doll-perfect default
+- [ ] If in Enhance Mode: opened `references/enrichment-palette.md` and picked 4–6 enrichments by scene-type
 - [ ] For NSFW: appropriate variant or LoRA noted; safety boundary on minors maintained
 - [ ] Reviewed against `references/anti-ai-slop.md` if the draft is starting to feel stock
