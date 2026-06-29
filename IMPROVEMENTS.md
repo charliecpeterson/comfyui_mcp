@@ -1,9 +1,9 @@
 # comfyui_mcp — Suggested Improvements
 
-## Status — 2026-06-29 (co-located on the RTX 4090 box, ComfyUI 0.26.2)
+## Status — 2026-06-29 (co-located on the DGX Spark / GB10, ComfyUI 0.26.2)
 
 The split-host topology this doc was written from no longer applies; the MCP now runs
-next to ComfyUI, which is section 1's recommendation. That re-sorted the rest. Done:
+on the Spark next to ComfyUI, which is section 1's recommendation. That re-sorted the rest. Done:
 
 - **§1 deployment** — satisfied by co-location. `_comfy_root()` resolves locally, full
   filesystem tool surface works, no tunnel.
