@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .client import comfy
+from .core import TAB_DISCONNECT_HINT
 
 
 async def _workflow_from_tab(
@@ -18,10 +19,15 @@ async def _workflow_from_tab(
     wf = state.get("api_workflow" if want_api else "workflow")
     if wf is None:
         fmt_label = "api-format" if want_api else "ui-format"
+        tab_count = state.get("tab_count", 0)
+        hint = (
+            TAB_DISCONNECT_HINT if tab_count == 0
+            else "A tab is connected but has no valid graph open — load a workflow in it."
+        )
         return None, state, {
             "error": f"no {fmt_label} workflow available",
-            "hint": "is the bridge installed and a browser tab open with a valid graph?",
-            "tab_count": state.get("tab_count", 0),
+            "hint": hint,
+            "tab_count": tab_count,
         }
     return wf, state, None
 

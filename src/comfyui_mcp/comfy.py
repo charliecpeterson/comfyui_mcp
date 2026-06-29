@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 import websockets
 
+from .core import TAB_DISCONNECT_HINT
+
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 DEFAULT_TIMEOUT = float(os.environ.get("COMFYUI_TIMEOUT", "30"))
 
@@ -153,7 +155,11 @@ class ComfyClient:
                 if tab_id:
                     return r.json()
                 return {"ok": False, "error": "bridge_not_installed"}
-            return r.json()
+            result = r.json()
+            if isinstance(result, dict) and not result.get("ok") and "hint" not in result:
+                if "connected" in str(result.get("error", "")):
+                    result["hint"] = TAB_DISCONNECT_HINT
+            return result
 
     async def bridge_screenshot(self, tab_id: str | None = None, timeout: float = 10.0) -> dict[str, Any]:
         body: dict[str, Any] = {"timeout": timeout}

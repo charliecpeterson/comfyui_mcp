@@ -49,6 +49,7 @@ from .core import (
     _subgraph_def,
     _resolve_node_path,
     _outputs_to_files,
+    TAB_DISCONNECT_HINT,
 )
 from .widgets import (
     _ui_widget_order_aligned,
@@ -1357,10 +1358,12 @@ async def get_open_workflow(format: str = "ui", tab_id: str = "") -> dict[str, A
     if state.get("error"):
         return state
     if state.get("workflow") is None:
+        tab_count = state.get("tab_count", 0)
         return {
             "error": "no workflow state available",
-            "hint": "is the bridge installed (custom_nodes/comfyui-mcp-bridge) and is a browser tab open?",
-            "tab_count": state.get("tab_count", 0),
+            "hint": TAB_DISCONNECT_HINT if tab_count == 0 else
+                    "the bridge (custom_nodes/comfyui-mcp-bridge) is reachable but the tab has no graph open",
+            "tab_count": tab_count,
         }
 
     common_meta = {

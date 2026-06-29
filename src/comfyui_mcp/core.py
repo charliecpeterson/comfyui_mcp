@@ -15,6 +15,26 @@ from typing import Any
 _NOTE_NODE_TYPES = {"Note", "MarkdownNote", "Note Plus (mtb)", "PrimitiveNode", "easy showAnything"}
 _MODEL_FILE_EXTS = (".safetensors", ".ckpt", ".pth", ".gguf", ".bin", ".pt", ".onnx")
 
+# Live-edit ops (set_widget, add_node, ...) and tab reads need an open browser tab whose
+# bridge websocket is alive. Browsers suspend that socket in backgrounded tabs, so an op
+# can succeed and the very next call report zero tabs. Attached to every such failure.
+TAB_DISCONNECT_HINT = (
+    "A ComfyUI browser tab must be open AND focused — browsers suspend the bridge "
+    "websocket in backgrounded tabs, so calls can flap to zero tabs between requests. "
+    "Open the ComfyUI tab, hard-refresh it, and keep it the active foreground tab."
+)
+
+
+def _url_looks_remote(url: str) -> bool:
+    """True if COMFYUI_URL points at a host other than this machine. The filesystem tools
+    read ComfyUI's disk directly, so they only work when the MCP is co-located with it."""
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        return False
+    return host not in ("", "127.0.0.1", "localhost", "::1", "0.0.0.0")
+
 
 _comfy_root_cache: Path | None = None
 
@@ -47,10 +67,22 @@ def _comfy_root() -> Path:
         _comfy_root_cache = detected
         return detected
 
+    url = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
+    if _url_looks_remote(url):
+        raise RuntimeError(
+            f"ComfyUI root not found, and COMFYUI_URL ({url}) points at a remote host. The "
+            f"filesystem tools (list_custom_nodes, catalog/list_workflows, log tailing, "
+            f"snapshots) read ComfyUI's disk directly, so they only work when this MCP runs "
+            f"on the same machine as ComfyUI. Run the MCP on that host, or set COMFYUI_ROOT "
+            f"if the install is mounted locally. HTTP tools (generation, model listing, "
+            f"set_widget, queueing) work fine over the network."
+        )
     raise RuntimeError(
-        f"ComfyUI root not found. Set COMFYUI_ROOT env var, launch from the ComfyUI dir, "
-        f"or ensure ComfyUI is running on {os.environ.get('COMFYUI_URL', 'http://127.0.0.1:8188')} "
-        f"(current cwd: {cwd})"
+        f"ComfyUI root not found. Set COMFYUI_ROOT env var, or launch the MCP from the "
+        f"ComfyUI dir. Note: if you reach ComfyUI through an SSH tunnel or it runs on "
+        f"another host, the filesystem tools can't work from here even though the HTTP "
+        f"tools (generation, model listing, set_widget, queueing) will — run the MCP on "
+        f"the ComfyUI host. (COMFYUI_URL={url}, cwd={cwd})"
     )
 
 
