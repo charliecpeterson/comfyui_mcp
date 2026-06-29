@@ -1,5 +1,29 @@
 # comfyui_mcp — Suggested Improvements
 
+## Status — 2026-06-29 (co-located on the RTX 4090 box, ComfyUI 0.26.2)
+
+The split-host topology this doc was written from no longer applies; the MCP now runs
+next to ComfyUI, which is section 1's recommendation. That re-sorted the rest. Done:
+
+- **§1 deployment** — satisfied by co-location. `_comfy_root()` resolves locally, full
+  filesystem tool surface works, no tunnel.
+- **§4 token efficiency** — `get_open_workflow` now defaults to `summary`; `batch_run`
+  sweeps the open tab by reference when no `workflow` is passed. (commits `e897f40`, `b9a7bf1`)
+- **§2 bridge flakiness** — `bridge_op` retries once on a transient "no tabs connected".
+  The *headless edit path* turned out to already exist: a singleton `batch_run` patches
+  the open tab's API graph and queues with no live-canvas dependency, which is strictly
+  more robust than `bridge_op` for the flap case. Documented rather than rebuilt.
+- **§3 HTTP-ify filesystem tools** — **deferred.** Its value was split-host robustness,
+  which no longer applies. The routes were verified to exist on 0.26.2 if revived:
+  `GET /userdata?dir=workflows&recurse=true&split=false&full_info=true` (list),
+  `GET /userdata/<urlencoded-path>` (read), `GET /internal/logs/raw` (logs),
+  `GET /object_info` (node classes). Build only as a fallback gated on `_comfy_root()`
+  failing, and only if split-host returns.
+
+The original notes below are kept as the source analysis.
+
+---
+
 Context: these notes come from a working session that used this MCP heavily from a
 **split-host setup** (MCP running on a Mac, ComfyUI running on a DGX Spark over an SSH
 tunnel). That topology surfaced the rough edges below. This doc is written for a coding

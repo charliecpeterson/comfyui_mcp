@@ -356,6 +356,12 @@ async def batch_run(
     the bridge in API format) — so a seed/cfg sweep doesn't ship the whole graph in.
     Pass `workflow` explicitly to sweep an API-format graph you already hold.
 
+    Singleton lists make this the headless "change a value and run" path: a one-combo
+    grid like {"6.seed": [42], "3.cfg": [7.5]} patches the open tab's API graph and
+    queues it with no live-canvas dependency — unlike set_widget, it doesn't need a
+    focused tab and rides out a backgrounded/flapping bridge socket. Use it when the
+    change doesn't need to be visible on the user's canvas; use set_widget when it does.
+
     Args:
         params_grid: {"<node_id>.<input_name>": [v1, v2, ...]}. Example:
                      {"3.seed": [1,2,3], "5.cfg": [3.0, 7.5]}.

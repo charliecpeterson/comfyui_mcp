@@ -249,6 +249,12 @@ Find a model for a job — prefer files already on disk, fall back to Civitai, t
 ```
 No `workflow` arg → it sweeps the open tab's graph server-side (no need to ship the JSON).
 
+### Change a value and run without a live canvas
+```
+"batch_run({'6.seed': [42]}, queue=true)"
+```
+A singleton grid is the headless "set and run": it patches the open tab's API graph and queues, with no `bridge_op`/focused-tab dependency. Reach for `set_widget` instead when the change needs to be *visible* on the user's canvas (and persist for further editing).
+
 ### Pick a fun LoRA and run
 ```
 "list_models('loras'), describe_model on three from the pony folder, pick the
