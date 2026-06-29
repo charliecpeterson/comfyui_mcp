@@ -85,7 +85,7 @@ Two kinds, both Claude Code Skills. Not loaded by the MCP server — installed v
 
 Two skill families:
 
-- **Prompt-enhancement skills** (`prompt-flux`, `prompt-illustrious`, `prompt-qwen`, `prompt-zimage`, `prompt-ltx`, `prompt-wan`) — model-specific prompt builders. `prompt-illustrious` is backed by `tags.txt`, a snapshot of high-post-count danbooru general tags (README has the regeneration one-liner). `prompt-flux` has an **Enhance Mode** rubric (named-reference anchor + off-center detail + scene-typed enrichment palette in `references/enrichment-palette.md`) for turning thin seeds into specific prompts; this pattern is the template to replicate to other prose-model skills (qwen, zimage) when extending.
+- **Prompt-enhancement skills** (`prompt-flux`, `prompt-illustrious`, `prompt-qwen`, `prompt-zimage`, `prompt-ltx`, `prompt-wan`, `prompt-krea2`) — model-specific prompt builders. `prompt-illustrious` is backed by `tags.txt`, a snapshot of high-post-count danbooru general tags (README has the regeneration one-liner). `prompt-flux` has an **Enhance Mode** rubric (named-reference anchor + off-center detail + scene-typed enrichment palette in `references/enrichment-palette.md`) for turning thin seeds into specific prompts; this pattern is the template to replicate to other prose-model skills when extending (`prompt-krea2` follows it — its master lever is named-surfaces/named-light, and it disables Krea's built-in `prompt_enhance` since the skill *is* the enhancer).
 - **Workflow-engineering skills** (`comfyui-image-quality`, `comfyui-mask-strategy`, `comfyui-pose-editing`) — diagnostic recipes for quality/inpaint/pose problems. They reference MCP tools by name; keep them in sync when tool names or signatures change.
 
 ## When editing tools

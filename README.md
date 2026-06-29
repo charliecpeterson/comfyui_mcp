@@ -353,6 +353,7 @@ The repo ships Claude Code Skills under `skills/`. Two flavors:
 | `prompt-zimage` | Prompts for Z-Image base / Turbo / Omni / Edit. Bilingual, retro/synthwave-friendly. Turbo ignores negatives — the skill handles that. | long camera-style prose |
 | `prompt-wan` | Prompts for Wan 2.1 → 2.7 (Alibaba video). Handles the structural shift between Wan 2.2 (single-sentence) and Wan 2.6+ (shot-block with timecodes), plus 2.7 multi-reference / brand-color placement. | structured video prompt |
 | `prompt-ltx` | Prompts for LTX Video 2B/13B, LTX-2, LTX-2.3 (Lightricks). Uses the official 7-component structure; handles A2V audio-locking and the divisible-by-32 resolution constraint. | structured video prompt |
+| `prompt-krea2` | Prompts for Krea 2 Turbo / Raw (open-weights 12B, Qwen3-VL encoder). Dense-prose model; master lever is named-surfaces/named-light. Includes **Enhance Mode**; output goes in with the built-in `prompt_enhance` OFF (the skill is the enhancer). | natural-language prompt (no negatives on Turbo) |
 
 **Workflow-engineering skills** — diagnose and fix image quality issues, with concrete recipes from real iteration sessions.
 
@@ -391,6 +392,7 @@ After either, restart Claude Code. The skills are invokable as `/prompt-flux`, `
 > /prompt-zimage athletic woman running at sunrise
 > /prompt-wan a sword fight under autumn maples, Wan 2.6 shot-block
 > /prompt-ltx an espresso machine pulling a shot, LTX-2.3 with audio
+> /prompt-krea2 a weathered fisherman mending a net at dawn
 ```
 
 The skill returns a ready-to-paste prompt (and negative if applicable). Combine with the MCP tools:
@@ -450,6 +452,7 @@ comfyui-mcp/
     ├── prompt-zimage/{SKILL.md, references/*.md}
     ├── prompt-wan/{SKILL.md, references/*.md}
     ├── prompt-ltx/{SKILL.md, references/*.md}
+    ├── prompt-krea2/{SKILL.md, references/*.md}
     ├── comfyui-image-quality/SKILL.md
     ├── comfyui-mask-strategy/SKILL.md
     └── comfyui-pose-editing/SKILL.md
