@@ -68,6 +68,8 @@ from .snapshots import (
     _read_workflow_for_apply,
     _save_pre_apply_snapshot,
 )
+from . import civitai as _civitai
+from . import loras as _loras_mod
 
 mcp = FastMCP("comfyui-mcp")
 
@@ -2726,6 +2728,308 @@ async def _edit_ui(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) -
             applied.append(entry)
 
     return {"workflow": wf, "format": "ui", "applied": applied, "errors": errors}
+
+
+@mcp.tool()
+async def suggest_local_loras(
+    intent: str,
+    base_model: str = "",
+    k: int = 8,
+) -> dict[str, Any]:
+    """Find LoRAs already downloaded under <COMFYUI_ROOT>/models/loras/ that match an intent.
+
+    Walks the LoRA dir recursively, reads each safetensors header for training tags
+    (Kohya's ss_tag_frequency) + author-declared trigger phrase + base model, then
+    ranks by tag overlap with `intent`. Returns ready-to-use candidates with their
+    real trigger words and a recommended strength.
+
+    Use this BEFORE search_civitai — the LoRA the user wants may already be on disk.
+
+    Args:
+      intent: free-text description of what the user wants (e.g. "photographic
+              style with film grain", "neon cyberpunk lighting", "muscular fantasy
+              warrior"). Tokenized, stopwords dropped.
+      base_model: optional family filter. Free-form ("Flux.1 D", "illustrious",
+                  "sdxl", "Pony", "Wan 2.6") — normalized internally to a small
+                  enum (flux1/flux2/sdxl/sd15/illustrious/pony/qwen/zimage/wan/ltx).
+                  LoRAs whose base family is detectably DIFFERENT are filtered out;
+                  LoRAs with undetectable base are kept (lenient).
+      k: max results.
+
+    Returns: {ok, intent, base_family_normalized, total_scored, returned, candidates}
+    where each candidate is {filename, base_model_raw, base_family, trigger_words,
+    top_training_tags, recommended_strength, size_mb, score}.
+    """
+    return _loras_mod.suggest(intent=intent, base_model=base_model or None, k=k)
+
+
+@mcp.tool()
+async def search_civitai(
+    query: str,
+    types: str = "LORA",
+    base_model: str = "",
+    nsfw: bool = False,
+    sort: str = "Most Downloaded",
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search Civitai for any model type (LORA, Checkpoint, Controlnet, Upscaler,
+    TextualInversion, VAE, Hypernetwork, MotionModule).
+
+    BEFORE REACHING FOR THIS: call suggest_local_loras first. The LoRA the user
+    wants may already be downloaded. Only use search_civitai when the local
+    catalogue doesn't have what's needed, or the user explicitly asked to search.
+
+    Safety rails baked in: items where Civitai flags `minor=true` are dropped
+    silently and never returned. NSFW is opt-in via nsfw=True; default is SFW.
+
+    Defaults:
+      - `sort='Most Downloaded'` is intentional: 'Highest Rated' returns ZERO
+        results for non-LoRA types (no items meet the rating threshold).
+      - `nsfw=False` — only flip when the user explicitly asks for NSFW content.
+
+    Args:
+      query: free-text search terms (e.g. "neon noir", "openpose").
+      types: model type — one of LORA, Checkpoint, Controlnet, Upscaler,
+             TextualInversion, VAE, Hypernetwork, MotionModule, LoCon, MotionModule.
+             Pass a comma-separated list to query multiple types in one call
+             (e.g. "LORA,Checkpoint"). Defaults to LORA.
+      base_model: filter by base model — Civitai uses strings like 'Flux.1 D',
+                  'SDXL 1.0', 'Illustrious', 'Pony', 'SD 1.5'. Critical for not
+                  surfacing cross-base-model results (an SDXL LoRA in a Flux
+                  workflow is useless). When in doubt, omit and filter client-side.
+      nsfw: include NSFW results. Default False. Never auto-flip — the user must
+            explicitly ask.
+      sort: 'Most Downloaded' (default), 'Highest Rated', 'Newest'.
+      limit: max results. Default 10. Civitai paginates via nextCursor (returned
+             in response when available).
+
+    Returns: {ok, count, items: [{id, name, type, tags, creator, downloads, nsfw,
+    versions: [{version_id, base_model, trained_words, file: {name, size_mb, ...},
+    primary_image: {url, ...}}]}]}. Item shape is lean (~10 fields) — full
+    description and license info live in describe_civitai_model.
+    """
+    types_arg: str | list[str] = types
+    if "," in types:
+        types_arg = [t.strip() for t in types.split(",") if t.strip()]
+    return await _civitai.search(
+        query=query,
+        types=types_arg,
+        base_model=base_model or None,
+        nsfw=nsfw,
+        sort=sort,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+async def describe_civitai_model(model_id: int) -> dict[str, Any]:
+    """Fetch full detail for a Civitai model by ID. Use after search_civitai when
+    the user picks one and you need version list / declared trigger words /
+    description before downloading.
+
+    HTML in the description is stripped and truncated to ~800 chars. Full version
+    list is returned with every file's size, format, and download URL. Trigger
+    words returned here are Civitai-DECLARED — often empty or out of date; the
+    canonical trigger words come from the file's own safetensors metadata after
+    download (download_civitai_model returns them).
+
+    Items where Civitai flags `minor=true` are refused outright.
+
+    Returns: {ok, id, name, type, description, tags, creator, downloads, versions: [...]}
+    """
+    return await _civitai.describe(model_id=model_id)
+
+
+@mcp.tool()
+async def download_civitai_model(
+    model_id: int,
+    version_id: int = 0,
+    subdir: str = "",
+    confirm: bool = False,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Download a Civitai model into the correct ComfyUI models/ subdir.
+
+    TWO-CALL CONFIRMATION (this writes hundreds of MB to disk):
+      1. First call with confirm=False (DEFAULT) returns a PREVIEW: target path,
+         filesize, base model. Nothing is written.
+      2. Show the preview to the user. If they approve, call AGAIN with confirm=True.
+
+    Auto-routes by Civitai type → ComfyUI subdir:
+      LORA / LoCon → models/loras/
+      Checkpoint → models/checkpoints/
+      Controlnet → models/controlnet/
+      Upscaler → models/upscale_models/
+      TextualInversion → models/embeddings/
+      VAE → models/vae/
+      Hypernetwork → models/hypernetworks/
+      MotionModule → models/animatediff_models/
+
+    File-type filtered: picks the actual loadable .safetensors / .ckpt / .pth from
+    the version's files list (Civitai bundles training-data ZIPs and example
+    images alongside; those are skipped).
+
+    Refuses to overwrite existing files unless overwrite=True. Items where
+    Civitai flags `minor=true` are refused outright.
+
+    After successful download, re-reads the file's actual safetensors metadata
+    and returns the CANONICAL trigger words (Civitai's declared words are
+    often empty or wrong; the file's own header is authoritative).
+
+    Args:
+      model_id: Civitai model id (from search_civitai).
+      version_id: specific version (from describe_civitai_model). Default 0 = newest.
+      subdir: optional sub-path under the auto-routed type dir (e.g. "flux/" to
+              go under models/loras/flux/). Relative paths only; no '..' allowed.
+      confirm: must be True to actually download. Default False = preview only.
+      overwrite: replace an existing file at the target path. Default False.
+
+    Returns (preview): {ok, preview: {...}, next_step: "..."}
+    Returns (downloaded): {ok, downloaded: true, path, size_mb, trained_words_canonical,
+                          safetensors_metadata_summary, hint}
+    """
+    return await _civitai.download(
+        model_id=model_id,
+        version_id=version_id if version_id else None,
+        subdir=subdir or None,
+        confirm=confirm,
+        overwrite=overwrite,
+    )
+
+
+@mcp.tool()
+async def add_lora_to_workflow(
+    filename: str,
+    strength: float = 0.75,
+    append_trigger_words: bool = True,
+    tab_id: str = "",
+) -> dict[str, Any]:
+    """Add a LoRA to the open ComfyUI tab's workflow + optionally append its trigger
+    words to the positive CLIPTextEncode.
+
+    What this does:
+      1. Pulls the open tab's UI workflow via the bridge.
+      2. Reads the LoRA's safetensors metadata to extract canonical trigger words
+         and the recommended strength (overridden by the `strength` arg).
+      3. Adds a LoraLoader node to the canvas (it's NOT auto-wired — the agent
+         must connect MODEL and CLIP to it via connect_nodes, OR the user may
+         prefer to wire it manually).
+      4. If `append_trigger_words=True` AND a positive CLIPTextEncode is found,
+         appends the LoRA's trigger words to its prompt text via set_widget.
+         Skips trigger words already present (case-insensitive substring check).
+
+    Returns context the agent needs to finish the job: the new LoraLoader's node
+    id, the existing CheckpointLoader's id (so the agent can wire MODEL+CLIP
+    through the LoraLoader), and the existing LoRA loaders if any (so the agent
+    can decide whether to delete the new one and reuse an existing slot).
+
+    Args:
+      filename: LoRA filename relative to models/loras/ (e.g. "illustrious/foo.safetensors").
+                Use suggest_local_loras to get this.
+      strength: LoRA strength (typically 0.4–1.0). Defaults to 0.75. The LoRA's
+                metadata-recommended strength is included in the response.
+      append_trigger_words: if True (default), the LoRA's trigger words are
+                            appended to the positive prompt.
+      tab_id: target a specific tab; defaults to the most-recent.
+
+    Returns: {ok, lora_added: {node_id, filename, strength}, trigger_words_appended,
+              trigger_words: [...], hint, existing_lora_loaders, checkpoint_loader_id?}
+    """
+    # 1. Pull workflow + read LoRA metadata in parallel-ish
+    wf, _state, err = await _workflow_from_tab(tab_id=tab_id, want_api=False)
+    if err:
+        return {"ok": False, **err}
+
+    # 2. Resolve LoRA file path and read its metadata
+    try:
+        loras_root = _comfy_root() / "models" / "loras"
+    except RuntimeError as e:
+        return {"ok": False, "error": str(e)}
+    lora_path = loras_root / filename
+    if not lora_path.is_file():
+        return {"ok": False, "error": f"LoRA file not found: {lora_path}",
+                "hint": "filename must be relative to models/loras/ (use suggest_local_loras)"}
+    sf = _read_safetensors_metadata(lora_path)
+    if "error" in sf:
+        return {"ok": False, "error": f"could not read LoRA metadata: {sf['error']}"}
+    meta = sf.get("metadata") or {}
+    trigger_words = _loras_mod._extract_trigger_words(meta)
+    metadata_strength = _loras_mod._recommended_strength(meta)
+
+    # 3. Inspect existing graph: find LoRA loaders + positive text encode + checkpoint loader
+    existing_loaders = _loras_mod.find_lora_loader_nodes(wf)
+    positive_id = _loras_mod.find_positive_clip_text_encode(wf)
+    checkpoint_id: int | None = None
+    for n in wf.get("nodes") or []:
+        if isinstance(n, dict) and n.get("type") in {"CheckpointLoaderSimple", "CheckpointLoader",
+                                                       "Load Checkpoint", "ECHO Checkpoint Loader",
+                                                       "UnetLoaderGGUF", "UNETLoader"}:
+            checkpoint_id = n.get("id")
+            break
+
+    # 4. Add the LoraLoader node. Don't auto-wire; surface what's needed instead.
+    add_result = await comfy.bridge_op(
+        {
+            "op": "add_node",
+            "class_type": "LoraLoader",
+            "pos": [0, 0],
+            "widget_values": {"lora_name": filename, "strength_model": strength, "strength_clip": strength},
+        },
+        tab_id=tab_id or None,
+    )
+    if not add_result.get("ok"):
+        return {"ok": False, "error": "add_node failed",
+                "details": add_result, "trigger_words": trigger_words}
+    new_node_id = (add_result.get("node") or {}).get("id")
+
+    # 5. Append trigger words to positive CLIPTextEncode if requested
+    trigger_words_appended = False
+    append_error: str | None = None
+    if append_trigger_words and trigger_words and positive_id is not None:
+        positive_node = next(
+            (n for n in wf.get("nodes") or [] if isinstance(n, dict) and n.get("id") == positive_id),
+            None,
+        )
+        if positive_node:
+            widgets = positive_node.get("widgets_values") or []
+            current_text = widgets[0] if widgets and isinstance(widgets[0], str) else ""
+            new_text = _loras_mod.append_to_prompt(current_text, trigger_words)
+            if new_text != current_text:
+                widget_name = _loras_mod.positive_text_widget_name(positive_node.get("type") or "")
+                set_result = await comfy.bridge_op(
+                    {"op": "set_widget", "node_id": positive_id, "name": widget_name, "value": new_text},
+                    tab_id=tab_id or None,
+                )
+                if set_result.get("ok"):
+                    trigger_words_appended = True
+                else:
+                    append_error = f"set_widget failed: {set_result.get('error', set_result)}"
+
+    return {
+        "ok": True,
+        "lora_added": {
+            "node_id": new_node_id,
+            "filename": filename,
+            "strength": strength,
+            "metadata_recommended_strength": metadata_strength,
+        },
+        "trigger_words": trigger_words,
+        "trigger_words_appended": trigger_words_appended,
+        "trigger_words_append_error": append_error,
+        "positive_text_encode_id": positive_id,
+        "checkpoint_loader_id": checkpoint_id,
+        "existing_lora_loaders": existing_loaders,
+        "hint": (
+            "The LoraLoader is on the canvas but NOT wired. Connect "
+            f"MODEL and CLIP from checkpoint (node {checkpoint_id}) → "
+            f"LoraLoader (node {new_node_id}) via connect_nodes, then wire "
+            "LoraLoader's MODEL output to wherever the checkpoint's MODEL was "
+            "going (sampler or another LoRA), and similarly for CLIP."
+            if checkpoint_id is not None and new_node_id is not None
+            else "Manually wire the LoraLoader's MODEL + CLIP inputs to your "
+                 "model source, and route its outputs to the rest of the graph."
+        ),
+    }
 
 
 def main() -> None:
