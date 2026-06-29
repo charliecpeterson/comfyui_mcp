@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-from .core import _comfy_root
+from .core import _comfy_root, _model_search_paths
 from .model_meta import _read_safetensors_metadata, _top_training_tags
 
 
@@ -45,6 +45,7 @@ _BASE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"sd[\.\-_ ]?1\.?5|sd15|stable.?diffusion.?1", re.I), "sd15"),
     (re.compile(r"qwen", re.I), "qwen"),
     (re.compile(r"\bz[\-_ ]?image\b", re.I), "zimage"),
+    (re.compile(r"\bkrea\b", re.I), "krea"),
     (re.compile(r"\bwan\b", re.I), "wan"),
     (re.compile(r"\bltx\b|lightricks", re.I), "ltx"),
 ]
@@ -215,11 +216,15 @@ def suggest(
 ) -> dict[str, Any]:
     """Return top-k local LoRAs matching `intent`, optionally filtered by base model
     family (free-form input is normalized via normalize_base_model)."""
-    if loras_root is None:
+    if loras_root is not None:
+        roots = [Path(loras_root)]
+    else:
         try:
-            loras_root = _comfy_root() / "models" / "loras"
+            roots = _model_search_paths("loras")
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
+        if not roots:
+            return {"ok": False, "error": "no loras directory found (checked models/loras and extra_model_paths.yaml)"}
 
     target_family = normalize_base_model(base_model) if base_model else None
     intent_tokens = _tokenize(intent)
@@ -229,19 +234,25 @@ def suggest(
     candidates: list[dict[str, Any]] = []
     skipped_unreadable = 0
     skipped_base_mismatch = 0
-    for p in _iter_lora_paths(loras_root):
-        c = _candidate_record(p, loras_root)
-        if c is None:
-            skipped_unreadable += 1
-            continue
-        if target_family and target_family != "unknown" and c["base_family"] != "unknown":
-            if c["base_family"] != target_family:
-                skipped_base_mismatch += 1
+    seen_rel: set[str] = set()
+    for root in roots:
+        for p in _iter_lora_paths(root):
+            rel = str(p.relative_to(root))  # same rel path in two roots = a local cache of the NAS copy
+            if rel in seen_rel:
                 continue
-        score = _score(intent_tokens, c["_tokens"], c["_tag_freq"])
-        if score == 0:
-            continue
-        candidates.append({**c, "score": score})
+            seen_rel.add(rel)
+            c = _candidate_record(p, root)
+            if c is None:
+                skipped_unreadable += 1
+                continue
+            if target_family and target_family != "unknown" and c["base_family"] != "unknown":
+                if c["base_family"] != target_family:
+                    skipped_base_mismatch += 1
+                    continue
+            score = _score(intent_tokens, c["_tokens"], c["_tag_freq"])
+            if score == 0:
+                continue
+            candidates.append({**c, "score": score})
 
     candidates.sort(key=lambda x: (-x["score"], x["filename"]))
     top = candidates[:k]
@@ -255,7 +266,7 @@ def suggest(
         "intent": intent,
         "base_model_requested": base_model,
         "base_family_normalized": target_family,
-        "loras_root": str(loras_root),
+        "loras_roots": [str(r) for r in roots],
         "total_scored": len(candidates),
         "returned": len(top),
         "skipped_base_mismatch": skipped_base_mismatch,

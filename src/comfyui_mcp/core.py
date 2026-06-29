@@ -86,6 +86,44 @@ def _comfy_root() -> Path:
     )
 
 
+def _model_search_paths(category: str) -> list[Path]:
+    """Every directory ComfyUI searches for `category`: the built-in models/<category>
+    plus each block in extra_model_paths.yaml. Tools that hit ComfyUI's HTTP API
+    (list_models) already see these; this is for the tools that read model files off
+    disk directly (LoRA scan, metadata reads), which would otherwise miss a NAS library
+    registered only via extra_model_paths. Returns existing dirs, deduped, local-first.
+    """
+    root = _comfy_root()
+    paths: list[Path] = []
+    seen: set[str] = set()
+
+    def add(p: Path) -> None:
+        key = str(p)
+        if key not in seen and p.is_dir():
+            seen.add(key)
+            paths.append(p)
+
+    add(root / "models" / category)
+
+    cfg = root / "extra_model_paths.yaml"
+    if cfg.is_file():
+        try:
+            import yaml
+            data = yaml.safe_load(cfg.read_text()) or {}
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            for block in data.values():
+                if not isinstance(block, dict) or not block.get(category):
+                    continue
+                base = Path(str(block.get("base_path") or root)).expanduser()
+                for line in str(block[category]).splitlines():
+                    line = line.strip()
+                    if line:
+                        add((base / line).expanduser())
+    return paths
+
+
 def _detect_comfy_root_via_port() -> Path | None:
     """Find the process listening on the ComfyUI port and use its cwd. Returns None on
     any failure (no psutil, no listener, perms, etc) — caller falls back to error."""
