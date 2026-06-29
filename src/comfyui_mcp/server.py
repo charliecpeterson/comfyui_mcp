@@ -364,7 +364,10 @@ async def batch_run(
 
     Args:
         params_grid: {"<node_id>.<input_name>": [v1, v2, ...]}. Example:
-                     {"3.seed": [1,2,3], "5.cfg": [3.0, 7.5]}.
+                     {"3.seed": [1,2,3], "5.cfg": [3.0, 7.5]}. node_id is the
+                     API-format id; nodes nested in a subgraph look like "30:10",
+                     not the bare "10" that get_open_workflow summaries show. An
+                     unknown node_id is rejected with the list of available ids.
         workflow: API-format workflow. Omit to sweep the open tab (the default).
         mode: "grid" — cartesian product (3 seeds × 2 cfgs = 6 runs).
               "zip"  — parallel arrays of equal length (3 runs, paired).
@@ -390,6 +393,15 @@ async def batch_run(
             return {"error": f"key {key!r} must be 'node_id.input_name'"}
         node_id, input_name = key.split(".", 1)
         parsed.append((node_id, input_name, list(values)))
+
+    missing = [nid for nid, _, _ in parsed if nid not in workflow]
+    if missing:
+        return {
+            "error": f"node id(s) not in the workflow: {missing}",
+            "hint": "use the API-format node id — subgraph-nested nodes look like '30:10', "
+                    "not the '10' shown in get_open_workflow summaries / model_references",
+            "available_node_ids": sorted(workflow.keys()),
+        }
 
     if mode == "grid":
         combos = list(itertools.product(*[v for _, _, v in parsed]))
