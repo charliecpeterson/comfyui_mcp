@@ -343,27 +343,37 @@ async def edit_workflow(
 
 @mcp.tool()
 async def batch_run(
-    workflow: dict[str, Any],
     params_grid: dict[str, list[Any]],
+    workflow: dict[str, Any] | None = None,
     mode: str = "grid",
     max_runs: int = 16,
     queue: bool = True,
+    tab_id: str = "",
 ) -> dict[str, Any]:
     """Sweep a workflow across parameter combinations and queue each run.
 
+    With no `workflow`, sweeps the workflow open in the browser tab (pulled once from
+    the bridge in API format) — so a seed/cfg sweep doesn't ship the whole graph in.
+    Pass `workflow` explicitly to sweep an API-format graph you already hold.
+
     Args:
-        workflow: API-format workflow (use convert tools or save with format="api").
         params_grid: {"<node_id>.<input_name>": [v1, v2, ...]}. Example:
                      {"3.seed": [1,2,3], "5.cfg": [3.0, 7.5]}.
+        workflow: API-format workflow. Omit to sweep the open tab (the default).
         mode: "grid" — cartesian product (3 seeds × 2 cfgs = 6 runs).
               "zip"  — parallel arrays of equal length (3 runs, paired).
         max_runs: hard cap to prevent runaway sweeps. Raise explicitly if you want more.
         queue: True submits each variant to ComfyUI immediately and returns prompt_ids.
                False is dry-run: returns the generated workflows for inspection without queueing.
+        tab_id: optional target tab when sweeping the open workflow.
 
     Returns: {mode, count, runs: [{params, prompt_id?, queued|workflow, error?}]}.
     Pair with wait_for_completion(prompt_id) per run, or get_queue() to monitor progress.
     """
+    if workflow is None:
+        workflow, _, err = await _workflow_from_tab(tab_id=tab_id, want_api=True)
+        if err is not None:
+            return err
     fmt, _ = _detect_format(workflow)
     if fmt != "api":
         return {"error": f"batch_run requires API-format workflow; got {fmt}"}

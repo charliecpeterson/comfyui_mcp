@@ -247,6 +247,7 @@ Find a model for a job — prefer files already on disk, fall back to Civitai, t
 ```
 "run batch_run with seed=[1,2,3,4] and cfg=[5,7,9], queue=true"
 ```
+No `workflow` arg → it sweeps the open tab's graph server-side (no need to ship the JSON).
 
 ### Pick a fun LoRA and run
 ```
