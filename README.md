@@ -12,7 +12,7 @@ Works in two modes:
 ```
 ┌──────────────┐    stdio JSON-RPC    ┌────────────────────┐    HTTP/WS    ┌──────────────┐
 │ Claude Code  │◄────────────────────►│ comfyui-mcp server │◄─────────────►│   ComfyUI    │
-│   (or any    │       (42 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
+│   (or any    │       (47 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
 │  MCP client) │                      │                    │     :8188     │              │
 └──────────────┘                      └────────────────────┘               └──────┬───────┘
                                                                                    │
@@ -145,7 +145,7 @@ Once everything's wired:
  draws polyline mask, inpaints once]
 ```
 
-## Tool surface (42 tools)
+## Tool surface (47 tools)
 
 ### Discovery
 
@@ -214,6 +214,18 @@ Once everything's wired:
 | `screenshot_canvas(tab_id?)` | Inline PNG of the visual graph. |
 | `bridge_debug()` | Diagnostic dump: live tabs, pending events, sockets. |
 
+### LoRA / Civitai discovery
+
+Find a model for a job — prefer files already on disk, fall back to Civitai, then inject into the open tab. Driven end-to-end by the `find-loras` skill, but each tool is usable on its own.
+
+| Tool | Purpose |
+|---|---|
+| `suggest_local_loras(intent, base_model?, k?)` | Rank LoRAs already under `<COMFYUI_ROOT>/models/loras/` against a free-text `intent`. Reads each safetensors header for training tags + trigger phrase + base family; filters out cross-base mismatches. Returns candidates with real trigger words and a recommended strength. **Try this BEFORE `search_civitai`** — it may already be on disk. |
+| `search_civitai(query, types?, base_model?, nsfw?, sort?, limit?)` | Search Civitai for any model type (`LORA`, `Checkpoint`, `Controlnet`, `Upscaler`, `TextualInversion`, `VAE`, ...). SFW-default (`nsfw=False`), minor-filtered, lean response shape. `sort` defaults to `Most Downloaded` (universal across types). |
+| `describe_civitai_model(model_id)` | Full detail for one Civitai model: versions, declared trigger words, base model, file sizes — without the bloated raw API payload. |
+| `download_civitai_model(model_id, version_id?, subdir?, confirm?, overwrite?)` | **Two-call confirmation** (writes hundreds of MB): first call returns a preview, second with `confirm=True` writes. Auto-routes to the correct `models/` subdir by model type. Re-reads the downloaded file's safetensors metadata for canonical trigger words. |
+| `add_lora_to_workflow(filename, strength?, append_trigger_words?, tab_id?)` | Inject a LoRA into the open tab: inserts/extends the LoRA-loader chain and (by default) appends its trigger words to the positive `CLIPTextEncode`. |
+
 ## Common recipes
 
 ### Run the open workflow and show me the result
@@ -240,6 +252,13 @@ Once everything's wired:
 ```
 "list_models('loras'), describe_model on three from the pony folder, pick the
  one whose tags look most fun, set_widget into the LoRA stack, run_workflow"
+```
+
+### Find a LoRA for a look (local first, Civitai fallback)
+```
+"suggest_local_loras intent='neon cyberpunk lighting' — if nothing local fits,
+ search_civitai, describe_civitai_model the top hit, download_civitai_model with
+ confirm, then add_lora_to_workflow"  (or just: /find-loras)
 ```
 
 ### Watch a long run without blocking
@@ -402,7 +421,7 @@ comfyui-mcp/
 ├── CLAUDE.md            # agent-facing context for Claude Code
 ├── src/comfyui_mcp/
 │   ├── __init__.py
-│   ├── server.py        # all 42 @mcp.tool() entry points
+│   ├── server.py        # all 47 @mcp.tool() entry points
 │   ├── client.py        # shared singleton ComfyClient
 │   ├── comfy.py         # httpx + websockets wrapper over ComfyUI REST/WS
 │   ├── core.py          # _comfy_root, _detect_format, _resolve_node_path, _subgraph_def
