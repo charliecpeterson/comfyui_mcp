@@ -149,16 +149,26 @@ class ComfyClient:
         body: dict[str, Any] = {"op": op, "timeout": timeout}
         if tab_id:
             body["tab_id"] = tab_id
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=timeout + 5) as c:
-            r = await c.post("/mcp_bridge/op", json=body)
-            if r.status_code == 404:
-                if tab_id:
-                    return r.json()
+        # A backgrounded tab can momentarily drop its bridge socket, so an op lands
+        # as "no tabs connected" a beat before the tab re-registers. One short retry
+        # rides out that flap; kept to a single brief wait so a genuinely closed tab
+        # still fails fast.
+        for attempt in range(2):
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=timeout + 5) as c:
+                r = await c.post("/mcp_bridge/op", json=body)
+            if r.status_code == 404 and not tab_id:
                 return {"ok": False, "error": "bridge_not_installed"}
             result = r.json()
-            if isinstance(result, dict) and not result.get("ok") and "hint" not in result:
-                if "connected" in str(result.get("error", "")):
-                    result["hint"] = TAB_DISCONNECT_HINT
+            disconnected = (
+                isinstance(result, dict)
+                and not result.get("ok")
+                and "connected" in str(result.get("error", ""))
+            )
+            if disconnected and attempt == 0:
+                await asyncio.sleep(0.4)
+                continue
+            if disconnected and "hint" not in result:
+                result["hint"] = TAB_DISCONNECT_HINT
             return result
 
     async def bridge_screenshot(self, tab_id: str | None = None, timeout: float = 10.0) -> dict[str, Any]:

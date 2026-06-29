@@ -200,7 +200,7 @@ Once everything's wired:
 
 | Tool | Purpose |
 |---|---|
-| `get_open_workflow(format?, tab_id?)` | **Token-expensive** (full JSON). Prefer `describe_graph` / `get_node_widgets` for inspection. |
+| `get_open_workflow(format?, tab_id?)` | Defaults to a compact `summary` (~1-2KB). `format="ui"`/`"api"` returns the full JSON — **token-expensive**; prefer `describe_graph` / `get_node_widgets` for inspection. |
 | `get_node_widgets(node_id, tab_id?)` | Token-cheap: one node's widgets, name-resolved (handles seed_control_after_generate). Path syntax for subgraphs. |
 | `apply_workflow(workflow, tab_id?, confirm?)` | Replace the graph in a tab (UI format). |
 | `add_node(class_type, x, y, widget_values?)` | Surgical: insert one node. Validates class_type against /object_info; suggests fuzzy matches on miss. |

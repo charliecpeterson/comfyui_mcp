@@ -1325,10 +1325,12 @@ async def get_node_widgets(node_id: str, tab_id: str = "") -> dict[str, Any]:
 
 
 @mcp.tool()
-async def get_open_workflow(format: str = "ui", tab_id: str = "") -> dict[str, Any]:
-    """Read the FULL workflow currently open in the user's ComfyUI browser tab(s).
+async def get_open_workflow(format: str = "summary", tab_id: str = "") -> dict[str, Any]:
+    """Inspect the workflow open in the user's ComfyUI browser tab(s).
 
-    ⚠️ TOKEN-EXPENSIVE in "ui"/"api" mode: a typical workflow is 5-50KB; complex
+    Defaults to a compact "summary" (~1-2KB). Pass format="ui"/"api" only when you
+    genuinely need the entire JSON — that mode is TOKEN-EXPENSIVE: a typical workflow
+    is 5-50KB; complex
     ones (with subgraphs, rgthree power-loaders, etc.) can exceed 200KB. Most agent
     use cases want one of these instead:
 
@@ -1343,8 +1345,8 @@ async def get_open_workflow(format: str = "ui", tab_id: str = "") -> dict[str, A
     + a browser tab open.
 
     Args:
-        format: "ui" (editable; what read_workflow returns), "api" (queue-able), or
-                "summary" (compact metadata-only response, no full JSON).
+        format: "summary" (default; compact metadata-only response, no full JSON),
+                "ui" (editable; what read_workflow returns), or "api" (queue-able).
         tab_id: optional, target a specific tab. If omitted, returns the most recently
                 edited tab. tab_id is per-tab (sessionStorage-scoped); NOT ComfyUI's
                 clientId, which is shared across tabs in the same browser.
@@ -1381,6 +1383,7 @@ async def get_open_workflow(format: str = "ui", tab_id: str = "") -> dict[str, A
     if format == "summary":
         wf = state["workflow"]
         body = _summarize_workflow_body(wf, summary_only=False)
+        body.pop("format", None)  # body's "format" is the graph's ui/api; the response-level format is "summary"
         # Pull out subgraph definition ids/names from the workflow — the agent needs these
         # to follow up with describe_subgraph.
         sg_defs = (wf.get("definitions") or {}).get("subgraphs") or []

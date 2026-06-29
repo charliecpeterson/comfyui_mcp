@@ -20,7 +20,7 @@ Only fall back to Civitai when:
 
 A LoRA built for SDXL won't work in a Flux workflow. The check is non-negotiable.
 
-1. Call `get_open_workflow()` (token-cheap when there's only one tab) or `describe_graph()` to inspect the open workflow.
+1. Call `get_open_workflow()` (token-cheap: defaults to a compact summary) or `describe_graph()` to inspect the open workflow.
 2. Identify the base model from the checkpoint loader's `ckpt_name` widget, OR from any clearly named model file in the graph. Common patterns:
    - `flux1-dev.safetensors` / `flux1-schnell.safetensors` → **flux1**
    - `flux2-pro.safetensors` / `Flux2-base.safetensors` → **flux2**
