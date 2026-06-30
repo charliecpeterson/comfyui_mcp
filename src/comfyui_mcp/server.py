@@ -73,6 +73,10 @@ from . import loras as _loras_mod
 
 mcp = FastMCP("comfyui-mcp")
 
+# Frontend-only LiteGraph node classes — the browser editor knows them but they're
+# not in the backend's /object_info, so add_node skips the registry check for these.
+_FRONTEND_ONLY_NODES = {"Note", "MarkdownNote", "Reroute", "PrimitiveNode"}
+
 
 @mcp.tool()
 async def get_system_stats() -> dict[str, Any]:
@@ -845,28 +849,32 @@ async def add_node(
     so you can use the assigned id in subsequent set_widget calls. On unknown
     class_type: {ok: false, error, suggestions: [{name, score}, ...]}.
     """
-    # Validate class_type against the running ComfyUI's installed nodes
-    try:
-        info = await comfy.object_info(class_type)
-    except Exception as e:
-        return {"ok": False, "error": f"object_info lookup failed: {e}", "class_type": class_type}
-    if not info or class_type not in info:
-        # Fuzzy-suggest similar class names. Don't use _fuzzy_match_list — it's
-        # path-aware and splits on '/' which is meaningless for node class names.
-        suggestions: list[dict[str, Any]] = []
+    # Note/MarkdownNote/Reroute are frontend-only LiteGraph nodes: the bridge creates
+    # them client-side, but they're absent from the backend's /object_info, so the
+    # registry check below would wrongly reject them. Skip validation for that set.
+    if class_type not in _FRONTEND_ONLY_NODES:
+        # Validate class_type against the running ComfyUI's installed nodes
         try:
-            import difflib
-            full = await comfy.object_info()
-            close = difflib.get_close_matches(class_type, list(full.keys()), n=5, cutoff=0.5)
-            suggestions = [{"name": n, "category": (full.get(n) or {}).get("category", "")} for n in close]
-        except Exception:
-            pass
-        return {
-            "ok": False,
-            "error": f"unknown node class_type {class_type!r}; not registered with this ComfyUI",
-            "suggestions": suggestions,
-            "hint": "use search_nodes() to find the right name; check spelling/case",
-        }
+            info = await comfy.object_info(class_type)
+        except Exception as e:
+            return {"ok": False, "error": f"object_info lookup failed: {e}", "class_type": class_type}
+        if not info or class_type not in info:
+            # Fuzzy-suggest similar class names. Don't use _fuzzy_match_list — it's
+            # path-aware and splits on '/' which is meaningless for node class names.
+            suggestions: list[dict[str, Any]] = []
+            try:
+                import difflib
+                full = await comfy.object_info()
+                close = difflib.get_close_matches(class_type, list(full.keys()), n=5, cutoff=0.5)
+                suggestions = [{"name": n, "category": (full.get(n) or {}).get("category", "")} for n in close]
+            except Exception:
+                pass
+            return {
+                "ok": False,
+                "error": f"unknown node class_type {class_type!r}; not registered with this ComfyUI",
+                "suggestions": suggestions,
+                "hint": "use search_nodes() to find the right name; check spelling/case",
+            }
 
     op: dict[str, Any] = {"op": "add_node", "class_type": class_type}
     if x or y:
