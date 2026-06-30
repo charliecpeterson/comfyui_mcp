@@ -88,6 +88,19 @@ Krea 2 got a **dedicated reward model for text rendering** in training, so it's 
 
 Krea's signature look is "raw" photographic realism — it leans into **motion blur, film grain, low dynamic range, and textured finishes** rather than the over-clean AI gloss. When the user wants photoreal, name the grounded photographic conditions: "shot on color negative film, slight grain, low contrast, available-light only," "handheld with a touch of motion blur," "overcast flat light, muted palette." This pulls the output toward a believable photograph and away from the stock-render mean.
 
+### Anti-AI realism mode (verified on Krea 2 Turbo)
+
+When the goal is "make it NOT look AI-generated," the governing idea is: **a photo reads as real when it was taken badly** — fast, in bad light, with no thought for composition. This consistently beats "more detailed/cinematic."
+
+1. **Describe a mundane, unposed moment**, not a hero shot. A tired man rubbing his eye at a diner counter beats "a handsome man." Mid-action, caught unaware.
+2. **Name flat, unflattering light** — "weak directionless overcast through a grease-smudged window," not a flattering key. Flat light is the single strongest realism cue on Krea.
+3. **Name the surfaces and their wear** (the core skill lever) — chipped enamel, scratched laminate, faded fabric nap. Krea renders named worn materials beautifully.
+4. **Stack real flaws** — broken capillaries, missed stubble, a coffee stain at the cuff, a crooked phone frame, mild motion blur on a moving hand, sensor grain in the shadows.
+5. **Kill every slop token** — no "hyperrealistic, 8K, ultra-detailed, masterpiece, professional." They pull toward the over-rendered ArtStation look, the opposite of a photo.
+6. **Optional snapshot trick** (community, hit-or-miss): a casual capture framing like "shot on a phone, slightly crooked" or a file-extension cue (`IMG_4521.CR2`, `selfie.jpg`) biases toward amateur snapshots.
+
+Feed this with `prompt_enhance` **off** (the skill is the enhancer). For maximum realism, pair the prompt with the post/sampling pipeline: a **DetailDaemonSampler** during generation adds pore-level skin micro-texture, and an **Optical-Realism** depth-aware post-pass (atmospheric haze, depth-of-field falloff, highlight roll-off, film grain, halation) turns the render into a through-a-lens photograph. The prompt does ~70% of the work; those two nodes close the last gap.
+
 ## Anatomy — steer it
 
 Krea's technical report is candid that the model can produce "images that appear plausible at first glance while containing structural artifacts such as extra fingers, malformed limbs, or distorted text." An artifact reward model mitigates this but doesn't eliminate it. So:
