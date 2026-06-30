@@ -101,6 +101,19 @@ Pipeline order:
 ```
 Apply post-processing AFTER upscaling, never before (upscaling re-sharpens grain into noise).
 
+**Modern stack (validated on Krea 2 Turbo — bigger wins than the above):**
+
+1. **Detail Daemon during sampling** — `ComfyUI-Detail-Daemon`. The strongest texture lever now: it lowers noise-removal per step to add micro-detail without changing composition. Wire `KSamplerSelect → DetailDaemonSamplerNode → SamplerCustomAdvanced` (replaces the all-in-one KSampler; pair with `BasicGuider` for CFG~1 distilled models, `BasicScheduler`).
+   - `detail_amount`: **0.5–0.6** default (Flux / Krea / Z-Image), **0.75** for pore-heavy portraits, **stay under 0.85** (above that = over-sharpened/HDR crunch, itself an AI tell). SDXL: `<0.25`.
+   - `start` 0.1, `end` 0.9. Tune by sweeping with `batch_run(workflow=..., params_grid={"daemon.detail_amount":[0,0.25,0.5,0.75,1]})` + a labeled `compare_images` grid.
+2. **Optical-Realism depth-aware post-pass** — `ComfyUI-Optical-Realism`. One physics node that replaces separate grain/CA/vignette: depth-of-field falloff, atmospheric haze, lifted blacks, highlight roll-off, halation, film grain, chromatic aberration. Needs a depth map: `DepthAnythingV2Preprocessor` (controlnet_aux) → its IMAGE into `OpticalRealism.depth_map`, original image into `OpticalRealism.image`.
+   - Indoor/portrait starting point: `haze_strength` 0.12–0.2, `dof_intensity` 0.25–0.3, `grain_power` 0.03, `lift_blacks` 0.05, `chromatic_aberration` 0.002, `highlight_rolloff` 0.05. Landscapes take more haze.
+3. **Prompt does ~70%.** Pair with the `prompt-krea2` "anti-AI realism mode" (or the prose `prompt-*` skill for the model): mundane unposed moment, named FLAT light, named worn surfaces, stacked real flaws, zero slop tokens.
+
+Reusable templates live in the workflow library: `run_workflow(path="utils/optical-realism-postpass.api.json")` for the post-pass, `run_workflow(path="krea2/krea2_t2i_detail-daemon.api.json")` for the generator. **Note:** `MarkdownNote` is frontend-only — never put one in an API-format workflow (it breaks headless `/prompt`); use a sidecar `.md` instead.
+
+For native realism, **Z-Image Turbo** and **Krea 2** have the strongest out-of-the-box photographic look of the local models.
+
 ### Recipe D — Pipeline simplification
 
 **Common antipattern:** users have a `KSamplerAdvanced` split-stage setup (e.g. steps 0-20 / 20-30 with the same model on both halves). This is the SDXL base→refiner pattern misapplied — when both halves use the same model, you're just doing a single 30-step run with extra wiring.

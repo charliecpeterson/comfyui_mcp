@@ -12,7 +12,7 @@ Works in two modes:
 ```
 ┌──────────────┐    stdio JSON-RPC    ┌────────────────────┐    HTTP/WS    ┌──────────────┐
 │ Claude Code  │◄────────────────────►│ comfyui-mcp server │◄─────────────►│   ComfyUI    │
-│   (or any    │       (47 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
+│   (or any    │       (57 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
 │  MCP client) │                      │                    │     :8188     │              │
 └──────────────┘                      └────────────────────┘               └──────┬───────┘
                                                                                    │
@@ -145,7 +145,7 @@ Once everything's wired:
  draws polyline mask, inpaints once]
 ```
 
-## Tool surface (47 tools)
+## Tool surface (57 tools)
 
 ### Discovery
 
@@ -164,7 +164,7 @@ Once everything's wired:
 
 | Tool | Purpose |
 |---|---|
-| `run_workflow(workflow?, tab_id?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab. |
+| `run_workflow(workflow?, path?, tab_id?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab; `path=` loads + runs a saved API-format workflow file from the library. |
 | `queue_workflow(workflow?, tab_id?, client_id?)` | Submit. No-args queues the open tab and forwards the tab's client_id for live previews. |
 | `validate_workflow(workflow)` | Dry-run: queue + immediate cancel. Returns enriched `node_errors`. |
 | `resolve_missing_models(workflow?)` | One-call diagnose: validate + fuzzy-match every missing model reference, returns a fix plan with `auto_fix` candidates. |
@@ -195,6 +195,7 @@ Once everything's wired:
 | `describe_graph(workflow?, tab_id?)` | Token-efficient connection summary; flags orphans. Recurses into subgraphs (path-style ids). |
 | `describe_workflow(path?, tab_id?, summary_only?)` | Workflow file summary: notes_in_canvas, sidecar_md, folder_notes, model_references, top_types. Pass nothing → describes the open tab. |
 | `catalog_workflows(dir?, query?, type_contains?, model_contains?, limit?)` | Bulk describe across a directory. Server-side filters keep responses small on big libraries. |
+| `generate_workflow_index(dir?, filename?)` | (Re)write a browsable `_index.md` catalog of the workflow library — model, key nodes, and first note per workflow, grouped by folder. Run after adding/renaming workflows. |
 
 ### Live co-edit (requires bridge)
 
@@ -430,7 +431,7 @@ comfyui-mcp/
 ├── CLAUDE.md            # agent-facing context for Claude Code
 ├── src/comfyui_mcp/
 │   ├── __init__.py
-│   ├── server.py        # all 47 @mcp.tool() entry points
+│   ├── server.py        # all 57 @mcp.tool() entry points
 │   ├── client.py        # shared singleton ComfyClient
 │   ├── comfy.py         # httpx + websockets wrapper over ComfyUI REST/WS
 │   ├── core.py          # _comfy_root, _detect_format, _resolve_node_path, _subgraph_def
