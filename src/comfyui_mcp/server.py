@@ -79,6 +79,46 @@ mcp = FastMCP("comfyui-mcp")
 _FRONTEND_ONLY_NODES = {"Note", "MarkdownNote", "Reroute", "PrimitiveNode"}
 
 
+def _load_workflow_file(path: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Load an API-format workflow JSON from disk for run_workflow/batch_run `path=`.
+    Relative paths resolve against the workflows dir. Returns (workflow, error)."""
+    try:
+        p = Path(path).expanduser()
+        if not p.is_absolute():
+            p = _comfy_root() / "user" / "default" / "workflows" / path
+        wf = json.loads(p.read_text())
+    except Exception as e:
+        return None, {"ok": False, "error": f"could not load workflow from path {path!r}: {e}"}
+    if _detect_format(wf)[0] != "api":
+        return None, {"ok": False, "error": f"workflow file {path!r} is not API format; "
+                      "open it in a tab and run_workflow() instead"}
+    return wf, None
+
+
+def _apply_overrides(
+    workflow: dict[str, Any], overrides: dict[str, Any] | None
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Patch {"node_id.input_name": value} overrides onto an API-format workflow so a
+    saved template runs with a new prompt/seed/etc. without editing the file. Validates
+    every node id exists (subgraph-nested nodes look like "30:10"). Returns (wf, error)."""
+    if not overrides:
+        return workflow, None
+    parsed: list[tuple[str, str, Any]] = []
+    for key, value in overrides.items():
+        if "." not in key:
+            return None, {"ok": False, "error": f"override key {key!r} must be 'node_id.input_name'"}
+        node_id, input_name = key.split(".", 1)
+        parsed.append((node_id, input_name, value))
+    missing = [nid for nid, _, _ in parsed if nid not in workflow]
+    if missing:
+        return None, {"ok": False, "error": f"override node id(s) not in the workflow: {missing}",
+                      "available_node_ids": sorted(workflow.keys())}
+    wf = copy.deepcopy(workflow)
+    for node_id, input_name, value in parsed:
+        wf.setdefault(node_id, {}).setdefault("inputs", {})[input_name] = value
+    return wf, None
+
+
 @mcp.tool()
 async def get_system_stats() -> dict[str, Any]:
     """Return ComfyUI system info: device, vram, python/comfy version. Use this as a smoke test."""
@@ -350,6 +390,7 @@ async def edit_workflow(
 async def batch_run(
     params_grid: dict[str, list[Any]],
     workflow: dict[str, Any] | None = None,
+    path: str = "",
     mode: str = "grid",
     max_runs: int = 16,
     queue: bool = True,
@@ -357,9 +398,10 @@ async def batch_run(
 ) -> dict[str, Any]:
     """Sweep a workflow across parameter combinations and queue each run.
 
-    With no `workflow`, sweeps the workflow open in the browser tab (pulled once from
-    the bridge in API format) — so a seed/cfg sweep doesn't ship the whole graph in.
-    Pass `workflow` explicitly to sweep an API-format graph you already hold.
+    With no `workflow`/`path`, sweeps the workflow open in the browser tab (pulled once
+    from the bridge in API format) — so a seed/cfg sweep doesn't ship the whole graph in.
+    Pass `path` to sweep a saved API-format template from the library (resolves against
+    the workflows dir), or `workflow` to sweep an API-format graph you already hold.
 
     Singleton lists make this the headless "change a value and run" path: a one-combo
     grid like {"6.seed": [42], "3.cfg": [7.5]} patches the open tab's API graph and
@@ -374,6 +416,9 @@ async def batch_run(
                      not the bare "10" that get_open_workflow summaries show. An
                      unknown node_id is rejected with the list of available ids.
         workflow: API-format workflow. Omit to sweep the open tab (the default).
+        path: load + sweep a saved API-format template instead (e.g.
+              "krea2/krea2_t2i_detail-daemon.api.json"). A singleton in params_grid
+              acts as a static override, e.g. {"pos.text": ["a red bike"], "noise.noise_seed": [1,2,3]}.
         mode: "grid" — cartesian product (3 seeds × 2 cfgs = 6 runs).
               "zip"  — parallel arrays of equal length (3 runs, paired).
         max_runs: hard cap to prevent runaway sweeps. Raise explicitly if you want more.
@@ -384,6 +429,12 @@ async def batch_run(
     Returns: {mode, count, runs: [{params, prompt_id?, queued|workflow, error?}]}.
     Pair with wait_for_completion(prompt_id) per run, or get_queue() to monitor progress.
     """
+    if path:
+        if workflow is not None:
+            return {"ok": False, "error": "pass either workflow or path, not both"}
+        workflow, err = _load_workflow_file(path)
+        if err is not None:
+            return err
     if workflow is None:
         workflow, _, err = await _workflow_from_tab(tab_id=tab_id, want_api=True)
         if err is not None:
@@ -2291,6 +2342,7 @@ def describe_model(path: str, category: str = "") -> dict[str, Any]:
 async def run_workflow(
     workflow: dict[str, Any] | None = None,
     path: str = "",
+    overrides: dict[str, Any] | None = None,
     tab_id: str = "",
     wait_seconds: int = 300,
     strip_warnings: bool = False,
@@ -2301,8 +2353,13 @@ async def run_workflow(
     reusable template like "utils/optical-realism-postpass.api.json"). Relative paths
     resolve against <COMFYUI_ROOT>/user/default/workflows; absolute paths work too.
     The file must be API format (UI-format workflows can't be queued headless — open
-    them in a tab and run_workflow() instead). Edit values in the dict you load, or
-    sweep them with batch_run(workflow=...), if you need to override defaults.
+    them in a tab and run_workflow() instead).
+
+    Pass `overrides` to run a template with new values without editing the file:
+    {"<node_id>.<input>": value}, e.g. {"pos.text": "a red bicycle", "noise.noise_seed": 42}.
+    Applied to whichever workflow is resolved (path / explicit / open tab). Unknown
+    node ids are rejected with the available list. To SWEEP a value instead, use
+    batch_run (which also takes `path=`).
 
     PREFERRED PATTERN — modify the workflow already open in the user's ComfyUI tab,
     then run with no args:
@@ -2342,22 +2399,19 @@ async def run_workflow(
     if path:
         if workflow is not None:
             return {"ok": False, "error": "pass either workflow or path, not both"}
-        try:
-            p = Path(path).expanduser()
-            if not p.is_absolute():
-                p = _comfy_root() / "user" / "default" / "workflows" / path
-            workflow = json.loads(p.read_text())
-        except Exception as e:
-            return {"ok": False, "error": f"could not load workflow from path {path!r}: {e}"}
-        if _detect_format(workflow)[0] != "api":
-            return {"ok": False, "error": f"workflow file {path!r} is not API format; "
-                    "open it in a tab and run_workflow() instead"}
+        workflow, err = _load_workflow_file(path)
+        if err:
+            return err
     if workflow is None:
         wf, state, err = await _workflow_from_tab(tab_id=tab_id, want_api=True)
         if err:
             return err
         workflow = wf  # type: ignore[assignment]
         effective_client_id = state.get("comfy_client_id") if state else None
+    if overrides:
+        workflow, err = _apply_overrides(workflow, overrides)
+        if err:
+            return err
 
     fmt, _ = _detect_format(workflow)
     if fmt != "api":

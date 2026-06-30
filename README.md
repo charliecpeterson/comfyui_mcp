@@ -164,7 +164,7 @@ Once everything's wired:
 
 | Tool | Purpose |
 |---|---|
-| `run_workflow(workflow?, path?, tab_id?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab; `path=` loads + runs a saved API-format workflow file from the library. |
+| `run_workflow(workflow?, path?, overrides?, tab_id?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab; `path=` loads + runs a saved API-format template; `overrides={"node.input": val}` runs it with a new prompt/seed without editing the file. |
 | `queue_workflow(workflow?, tab_id?, client_id?)` | Submit. No-args queues the open tab and forwards the tab's client_id for live previews. |
 | `validate_workflow(workflow)` | Dry-run: queue + immediate cancel. Returns enriched `node_errors`. |
 | `resolve_missing_models(workflow?)` | One-call diagnose: validate + fuzzy-match every missing model reference, returns a fix plan with `auto_fix` candidates. |
