@@ -1363,6 +1363,97 @@ async def compare_images(
 
 
 @mcp.tool()
+async def view_video(
+    filename: str,
+    frames: int = 6,
+    subfolder: str = "",
+    type: str = "output",
+    max_long_edge: int = 768,
+) -> Any:
+    """Preview a generated video as a contact sheet: sample N evenly-spaced frames and
+    composite them into one inline labeled (A,B,C,...) image, so you can SEE the motion
+    of an i2v/t2v clip without leaving the chat. For mp4/webm from Wan/LTX/AnimateDiff —
+    view_file only returns metadata for video; this renders it.
+
+    Args:
+        filename: video in ComfyUI's output/input/temp (e.g. "wan_i2v_00001.mp4").
+        frames: how many frames to sample across the clip (clamped 2-12).
+        subfolder, type: locate the file ("output" default).
+        max_long_edge: resize each frame's long edge to this before compositing.
+
+    Returns: inline JPEG contact sheet, or {error}.
+    """
+    import shutil as _sh, subprocess, tempfile, os
+    import io as _io
+    if not _sh.which("ffmpeg") or not _sh.which("ffprobe"):
+        return {"error": "ffmpeg/ffprobe not found on PATH"}
+    try:
+        from PIL import Image as PILImage, ImageDraw, ImageFont  # type: ignore
+    except ImportError:
+        return {"error": "Pillow not installed in MCP venv"}
+    frames = max(2, min(int(frames), 12))
+
+    sub = type if type in ("output", "input", "temp") else "output"
+    vid = _comfy_root() / sub / subfolder / filename
+    if not vid.is_file():
+        return {"error": "video not found", "resolved_path": str(vid)}
+
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(vid)],
+            capture_output=True, text=True, timeout=20)
+        duration = float(probe.stdout.strip())
+    except Exception:
+        duration = 0.0
+
+    panels: list[Any] = []
+    with tempfile.TemporaryDirectory() as td:
+        for i in range(frames):
+            t = (i / (frames - 1)) * duration * 0.985 if duration > 0 else 0.0
+            fp = os.path.join(td, f"f{i:02d}.png")
+            try:
+                subprocess.run(["ffmpeg", "-y", "-ss", f"{t:.3f}", "-i", str(vid),
+                                "-frames:v", "1", "-update", "1", fp],
+                               capture_output=True, timeout=30)
+                if not os.path.exists(fp):
+                    continue
+                img = PILImage.open(fp).convert("RGB")
+                w, h = img.size
+                le = max(w, h)
+                if le > max_long_edge:
+                    s = max_long_edge / le
+                    img = img.resize((int(w * s), int(h * s)), PILImage.LANCZOS)
+                panels.append(img)
+            except Exception:
+                continue
+    if not panels:
+        return {"error": "failed to extract frames (is this a valid video?)"}
+
+    font = ImageFont.load_default()
+    for i, p in enumerate(panels):
+        d = ImageDraw.Draw(p)
+        tag = chr(ord("A") + i)
+        for dx, dy in ((1, 1), (-1, -1), (1, -1), (-1, 1)):
+            d.text((10 + dx, 10 + dy), tag, fill=(0, 0, 0), font=font)
+        d.text((10, 10), tag, fill=(255, 255, 0), font=font)
+
+    n = len(panels)
+    cols = int(n ** 0.5) if n ** 0.5 == int(n ** 0.5) else int(n ** 0.5) + 1
+    rows = (n + cols - 1) // cols
+    cw = max(p.width for p in panels)
+    ch = max(p.height for p in panels)
+    composite = PILImage.new("RGB", (cols * cw, rows * ch), (16, 16, 16))
+    for i, p in enumerate(panels):
+        x = (i % cols) * cw + (cw - p.width) // 2
+        y = (i // cols) * ch + (ch - p.height) // 2
+        composite.paste(p, (x, y))
+    buf = _io.BytesIO()
+    composite.save(buf, format="JPEG", quality=85, optimize=True)
+    return Image(data=buf.getvalue(), format="jpeg")
+
+
+@mcp.tool()
 async def view_file(
     filename: str,
     subfolder: str = "",

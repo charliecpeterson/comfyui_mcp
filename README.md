@@ -12,7 +12,7 @@ Works in two modes:
 ```
 ┌──────────────┐    stdio JSON-RPC    ┌────────────────────┐    HTTP/WS    ┌──────────────┐
 │ Claude Code  │◄────────────────────►│ comfyui-mcp server │◄─────────────►│   ComfyUI    │
-│   (or any    │       (57 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
+│   (or any    │       (58 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
 │  MCP client) │                      │                    │     :8188     │              │
 └──────────────┘                      └────────────────────┘               └──────┬───────┘
                                                                                    │
@@ -145,7 +145,7 @@ Once everything's wired:
  draws polyline mask, inpaints once]
 ```
 
-## Tool surface (57 tools)
+## Tool surface (58 tools)
 
 ### Discovery
 
@@ -181,6 +181,7 @@ Once everything's wired:
 |---|---|
 | `view_file(filename, ...)` | Inline image (auto-thumbnails 18MB+ outputs via PIL) OR metadata for video/audio. |
 | `view_image(...)` | Thin alias for `view_file` (image-only). |
+| `view_video(filename, frames?)` | Preview a generated clip: samples N evenly-spaced frames into one inline labeled contact sheet, so you can see the motion of an i2v/t2v video inline. |
 | `compare_images([{filename, ...}, ...])` | PIL composite of N images side-by-side / vertical / grid. A/B verification. |
 | `upload_input(path)` | Push a local file into ComfyUI's `input/` for LoadImage etc. |
 | `copy_to_input(filename, source_type=output)` | Copy from output/temp into input/ for chained inpaint passes. |
@@ -431,7 +432,7 @@ comfyui-mcp/
 ├── CLAUDE.md            # agent-facing context for Claude Code
 ├── src/comfyui_mcp/
 │   ├── __init__.py
-│   ├── server.py        # all 57 @mcp.tool() entry points
+│   ├── server.py        # all 58 @mcp.tool() entry points
 │   ├── client.py        # shared singleton ComfyClient
 │   ├── comfy.py         # httpx + websockets wrapper over ComfyUI REST/WS
 │   ├── core.py          # _comfy_root, _detect_format, _resolve_node_path, _subgraph_def

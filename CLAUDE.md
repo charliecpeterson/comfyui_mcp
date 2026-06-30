@@ -9,7 +9,7 @@ A stdio MCP server (`comfyui-mcp` console script) that lets an agent inspect, ed
 - **API-only** — talks to ComfyUI over HTTP/WS (`/prompt`, `/history`, `/object_info`, `/queue`, etc.).
 - **Live co-edit** — also talks to the bundled `comfyui-mcp-bridge` custom_node, which serves per-tab graph state from the actual browser editor over HTTP long-poll.
 
-The README at the repo root is the authoritative user-facing reference for the tool surface (57 tools) and bridge protocol. Read it before adding/changing tools.
+The README at the repo root is the authoritative user-facing reference for the tool surface (58 tools) and bridge protocol. Read it before adding/changing tools.
 
 ## Install / run
 
@@ -26,7 +26,7 @@ When wiring into Claude Code, point at the venv's `comfyui-mcp` binary directly.
 
 ### Module layout (`src/comfyui_mcp/`)
 
-`server.py` is the only file with `@mcp.tool()` decorators (~2900 lines, all 57 tools). Pure helpers were extracted into focused modules to keep server.py navigable:
+`server.py` is the only file with `@mcp.tool()` decorators (~2900 lines, all 58 tools). Pure helpers were extracted into focused modules to keep server.py navigable:
 
 - `client.py` — shared singleton `ComfyClient` (avoids server.py ↔ helpers import cycle). All helpers import `from .client import comfy`.
 - `comfy.py` — thin httpx/websockets wrapper over the ComfyUI REST + WS surface.
