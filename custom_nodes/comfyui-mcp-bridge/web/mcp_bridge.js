@@ -1,7 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 const PUSH_DEBOUNCE_MS = 800;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const POLL_PUSH_INTERVAL_MS = 3_000;
@@ -63,7 +63,7 @@ function buildLabel(workflow) {
 
     return {
         title: document.title || null,
-        url_hash: location.hash || null,
+        url: location.host + location.pathname + (location.hash || ""),
         node_count: nodes.length,
         top_types,
         prompt_preview,

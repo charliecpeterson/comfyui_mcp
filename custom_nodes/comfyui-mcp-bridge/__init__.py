@@ -70,6 +70,16 @@ def _push_event(tab_id: str, event: dict) -> None:
             fut.set_result(None)
 
 
+def _client_ip(request: web.Request) -> str | None:
+    """Best-effort source address of the browser tab. Honors a reverse proxy's
+    X-Forwarded-For / X-Real-IP before falling back to the socket peer, so tabs from
+    different machines against a shared ComfyUI are distinguishable in bridge_debug."""
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        return fwd.split(",")[0].strip() or None
+    return request.headers.get("X-Real-IP") or request.remote or None
+
+
 async def _read_json_or_beacon(request: web.Request) -> dict:
     try:
         return await request.json()
@@ -103,6 +113,7 @@ async def push_state(request: web.Request) -> web.Response:
         "workflow": data.get("workflow"),
         "api_workflow": data.get("api_workflow"),
         "label": data.get("label"),
+        "client_ip": _client_ip(request),
         "updated_at": _now_ms(),
     }
     return web.json_response({"ok": True})
@@ -121,6 +132,8 @@ async def heartbeat(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "regenerate": True})
 
     existing["updated_at"] = _now_ms()
+    if not existing.get("client_ip"):
+        existing["client_ip"] = _client_ip(request)
     return web.json_response({"ok": True, "known": True})
 
 
@@ -151,6 +164,7 @@ async def current(request: web.Request) -> web.Response:
             "api_workflow": t["api_workflow"],
             "comfy_client_id": t.get("comfy_client_id"),
             "label": t.get("label"),
+            "client_ip": t.get("client_ip"),
             "updated_at": t["updated_at"],
             "tab_count": len(_tabs),
         })
@@ -172,6 +186,7 @@ async def current(request: web.Request) -> web.Response:
                 "tab_id": tid,
                 "comfy_client_id": _tabs[tid].get("comfy_client_id"),
                 "label": _tabs[tid].get("label"),
+                "client_ip": _tabs[tid].get("client_ip"),
                 "updated_at": _tabs[tid]["updated_at"],
             }
             for tid in sorted(_tabs, key=lambda k: -_tabs[k]["updated_at"])

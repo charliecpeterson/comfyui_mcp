@@ -1861,9 +1861,13 @@ async def get_open_workflow(format: str = "summary", tab_id: str = "") -> dict[s
 async def bridge_debug() -> dict[str, Any]:
     """Diagnostic dump of the comfyui-mcp-bridge state.
 
-    Returns: live tabs (with labels showing workflow type / prompt preview / node count),
-    pending events per tab, ComfyUI WebSocket sockets dict, server timestamps. Use this
-    when tabs aren't being seen, to confirm which tabs have the new bridge JS loaded.
+    Returns: live tabs, each with a `label` (workflow title, node_count, top_types,
+    prompt_preview, url) and `client_ip`, plus pending events per tab, the ComfyUI
+    WebSocket sockets dict, and server timestamps. Use it when tabs aren't being seen, or
+    to pick which tab to target when several are open — including tabs from different
+    machines against a shared ComfyUI, which `client_ip` and `label.title` disambiguate.
+    Pass the chosen `tab_id` to any tab-scoped tool. (`client_ip`/`label.url` need bridge
+    JS >= 0.9.1; a stale tab reports them as null until hard-refreshed.)
     """
     return await comfy.bridge_debug()
 

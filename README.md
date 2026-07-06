@@ -63,7 +63,7 @@ Restart ComfyUI. In its startup log you should see:
 Open the ComfyUI editor in a browser; in the JS console you should see:
 
 ```
-[mcp_bridge] v0.9.0 ready (tab_id=..., comfy_client_id=..., trust=true)
+[mcp_bridge] v0.9.1 ready (tab_id=..., comfy_client_id=..., trust=true)
 ```
 
 Verify with:
@@ -456,7 +456,7 @@ comfyui-mcp/
 ├── tests/               # offline unit tests (pytest) for the pure helpers
 ├── custom_nodes/comfyui-mcp-bridge/
 │   ├── __init__.py      # registers HTTP routes + middleware on ComfyUI
-│   └── web/mcp_bridge.js  # ComfyUI editor extension (JS, v0.9.0)
+│   └── web/mcp_bridge.js  # ComfyUI editor extension (JS, v0.9.1)
 └── skills/              # Claude Code Skills — symlink into <ComfyUI>/.claude/skills/
     ├── prompt-flux/{SKILL.md, references/*.md}
     ├── prompt-illustrious/{SKILL.md, SKILL-pony.md, tags.txt, refs/, extract_danbooru_tag.py}
