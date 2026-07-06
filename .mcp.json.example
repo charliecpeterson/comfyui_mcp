@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "comfyui": {
+      "type": "stdio",
+      "command": "/absolute/path/to/comfyui-mcp/venv/bin/comfyui-mcp",
+      "args": [],
+      "env": {
+        "CIVITAI_API_KEY": ""
+      }
+    }
+  }
+}

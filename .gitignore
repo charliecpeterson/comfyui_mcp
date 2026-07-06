@@ -31,3 +31,6 @@ ENV/
 
 # Claude Code per-user local settings (the shared .claude/settings.json is still tracked)
 .claude/settings.local.json
+
+# Local MCP wiring — machine-specific venv path + API key. Copy .mcp.json.example.
+.mcp.json
