@@ -12,6 +12,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
 comfyui-mcp = "comfyui_mcp.server:main"
 

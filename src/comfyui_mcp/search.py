@@ -39,6 +39,30 @@ def _score_query_match(name: str, category: str, description: str, tokens: list[
     return total
 
 
+def _score_query_match_partial(name: str, category: str, description: str, tokens: list[str]) -> int:
+    """Like `_score_query_match` but OR-semantics: sums whichever tokens matched (0 for
+    ones that didn't) instead of hard-failing when any token misses. Fallback for when
+    strict AND-matching returns nothing — an overly-specific multi-concept query (e.g.
+    stacking several near-synonyms: "ipadapter face id instantid pulid") shouldn't come
+    back empty just because no single node matches every alternative name at once."""
+    name_l = name.lower()
+    cat_l = (category or "").lower()
+    desc_l = (description or "").lower()
+    total = 0
+    for t in tokens:
+        ts = 0
+        if t == name_l:
+            ts = 200
+        elif t in name_l:
+            ts = 80
+        if t in cat_l:
+            ts = max(ts, 60)
+        if t in desc_l:
+            ts = max(ts, 40)
+        total += ts
+    return total
+
+
 def _fuzzy_match_list(needle: str, haystack: list) -> list[dict[str, Any]]:
     """Find candidates in haystack that resemble needle by basename (sans dir + ext)."""
     if not isinstance(needle, str) or not isinstance(haystack, list):

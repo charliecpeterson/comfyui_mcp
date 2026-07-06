@@ -15,6 +15,30 @@ from typing import Any
 _NOTE_NODE_TYPES = {"Note", "MarkdownNote", "Note Plus (mtb)", "PrimitiveNode", "easy showAnything"}
 _MODEL_FILE_EXTS = (".safetensors", ".ckpt", ".pth", ".gguf", ".bin", ".pt", ".onnx")
 
+
+def _combo_options(decl: Any) -> list | None:
+    """Extract a combo's option list from an /object_info input declaration.
+
+    ComfyUI has migrated some (not all) core nodes to a newer schema shape mid-transition
+    to its V3 node API: the classic shape is `[[opt1, opt2, ...], {...opts}]` (the type
+    itself IS the options list); the newer shape is `["COMBO", {"options": [...], ...}]`
+    (the type is the literal string "COMBO", options live nested in the second element).
+    Both are live simultaneously on a single ComfyUI install — e.g. KSampler's
+    sampler_name/scheduler are still classic-shape while ImageScaleToTotalPixels's
+    upscale_method is already COMBO-shape. Code that only checks `isinstance(t, list)`
+    silently treats every COMBO-shape input as "not a combo at all" — it vanishes from
+    widget-order lists and model-path validation instead of erroring, which is worse.
+    """
+    if not isinstance(decl, (list, tuple)) or not decl:
+        return None
+    t = decl[0]
+    if isinstance(t, list):
+        return t
+    opts = decl[1] if len(decl) > 1 and isinstance(decl[1], dict) else {}
+    if t == "COMBO" and isinstance(opts.get("options"), list):
+        return opts["options"]
+    return None
+
 # Live-edit ops (set_widget, add_node, ...) and tab reads need an open browser tab whose
 # bridge websocket is alive. Browsers suspend that socket in backgrounded tabs, so an op
 # can succeed and the very next call report zero tabs. Attached to every such failure.
@@ -124,9 +148,10 @@ def _model_search_paths(category: str) -> list[Path]:
     return paths
 
 
-def _detect_comfy_root_via_port() -> Path | None:
-    """Find the process listening on the ComfyUI port and use its cwd. Returns None on
-    any failure (no psutil, no listener, perms, etc) — caller falls back to error."""
+def _find_comfy_pid() -> int | None:
+    """Find the pid of the process listening on COMFYUI_URL's port, via psutil. Returns
+    None on any failure (no psutil, no listener, perms, etc). Shared by the cwd-discovery
+    path below and by get_process_info's supervisor detection."""
     try:
         import psutil
         from urllib.parse import urlparse
@@ -139,19 +164,109 @@ def _detect_comfy_root_via_port() -> Path | None:
         return None
     try:
         for conn in psutil.net_connections(kind="inet"):
-            if conn.status != psutil.CONN_LISTEN:
-                continue
-            if conn.laddr and conn.laddr.port == port and conn.pid:
-                try:
-                    proc = psutil.Process(conn.pid)
-                    cwd = Path(proc.cwd())
-                    if (cwd / "main.py").exists() and (cwd / "custom_nodes").exists():
-                        return cwd
-                except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
-                    continue
+            if conn.status == psutil.CONN_LISTEN and conn.laddr and conn.laddr.port == port and conn.pid:
+                return conn.pid
     except (psutil.AccessDenied, OSError):
         return None
     return None
+
+
+def _detect_comfy_root_via_port() -> Path | None:
+    """Find the process listening on the ComfyUI port and use its cwd. Returns None on
+    any failure (no psutil, no listener, perms, etc) — caller falls back to error."""
+    pid = _find_comfy_pid()
+    if pid is None:
+        return None
+    try:
+        import psutil
+        proc = psutil.Process(pid)
+        cwd = Path(proc.cwd())
+        if (cwd / "main.py").exists() and (cwd / "custom_nodes").exists():
+            return cwd
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+        return None
+    return None
+
+
+def _process_supervisor_info(pid: int) -> dict[str, Any]:
+    """Best-effort classification of how a process is being kept alive: a systemd unit
+    (system- or user-scoped), a tmux/screen session, a docker container, or a bare/detached
+    process with no supervisor. Restarting a system-scoped systemd service needs `sudo`;
+    restarting a bare process means relaunching its exact command yourself — knowing which
+    up front saves the archaeology of manually cross-checking `ps`/`systemctl`/`journalctl`.
+
+    Reads /proc/<pid>/cgroup and psutil's parent-process chain. Never raises — permission
+    errors and missing psutil degrade to partial info with an `error` field.
+    """
+    import re as _re
+    info: dict[str, Any] = {"pid": pid, "supervisor": "unknown"}
+    try:
+        import psutil
+    except ImportError:
+        info["error"] = "psutil not installed"
+        return info
+
+    try:
+        proc = psutil.Process(pid)
+    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+        info["error"] = str(e)
+        return info
+
+    try:
+        info["cmdline"] = proc.cmdline()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        info["cmdline"] = None
+
+    cgroup_text = ""
+    try:
+        cgroup_text = Path(f"/proc/{pid}/cgroup").read_text()
+    except OSError:
+        pass
+
+    service_match = _re.search(r"[\w.@-]+\.service", cgroup_text)
+    if service_match:
+        unit = service_match.group(0)
+        info["supervisor"] = "systemd"
+        info["detail"] = unit
+        if "system.slice" in cgroup_text:
+            info["systemd_scope"] = "system"
+            info["restart_hint"] = f"System-scoped unit — restart with: sudo systemctl restart {unit}"
+        else:
+            info["systemd_scope"] = "user"
+            info["restart_hint"] = f"User-scoped unit — restart with: systemctl --user restart {unit}"
+        return info
+
+    if _re.search(r"docker|containerd", cgroup_text):
+        info["supervisor"] = "docker"
+        info["detail"] = "cgroup path references docker/containerd"
+        return info
+
+    try:
+        ancestors = [p.name() for p in proc.parents()]
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        ancestors = []
+    if any("tmux" in a for a in ancestors):
+        info["supervisor"] = "tmux"
+        return info
+    if "screen" in ancestors:
+        info["supervisor"] = "screen"
+        return info
+
+    try:
+        environ = proc.environ()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        environ = {}
+    if "TMUX" in environ:
+        info["supervisor"] = "tmux"
+    elif "STY" in environ:
+        info["supervisor"] = "screen"
+    else:
+        info["supervisor"] = "bare_process"
+        info["detail"] = (
+            "no systemd/docker/tmux/screen signal found — likely launched directly or "
+            "via nohup; restarting means relaunching the exact command yourself"
+        )
+    return info
 
 
 def _walk_json(base: Path) -> dict[str, Any]:

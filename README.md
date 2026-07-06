@@ -12,7 +12,7 @@ Works in two modes:
 ```
 ┌──────────────┐    stdio JSON-RPC    ┌────────────────────┐    HTTP/WS    ┌──────────────┐
 │ Claude Code  │◄────────────────────►│ comfyui-mcp server │◄─────────────►│   ComfyUI    │
-│   (or any    │       (58 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
+│   (or any    │       (66 tools)     │  (this package)    │  127.0.0.1    │   :8188      │
 │  MCP client) │                      │                    │     :8188     │              │
 └──────────────┘                      └────────────────────┘               └──────┬───────┘
                                                                                    │
@@ -145,7 +145,7 @@ Once everything's wired:
  draws polyline mask, inpaints once]
 ```
 
-## Tool surface (58 tools)
+## Tool surface (66 tools)
 
 ### Discovery
 
@@ -158,16 +158,23 @@ Once everything's wired:
 | `list_workflows(dir?)` | Recursive .json walk under `<COMFYUI_ROOT>/user/default/workflows`. |
 | `list_custom_nodes()` | Enumerate `custom_nodes/` packages. |
 | `read_workflow(path)` | Read + format-detect (UI vs API) a workflow file. |
+| `read_image_workflow(filename, ...)` | Extract the workflow ComfyUI embedded in a generated image (PNG chunks / WebP EXIF) — the headless "drag an old output back in". Returns the API `prompt` ready for `run_workflow`. |
 | `get_system_stats()` | Smoke test: device, vram, comfy version. |
+| `get_process_info()` | How the running ComfyUI process is supervised — systemd (system/user scope), tmux, screen, docker, or bare. Call before trying to restart it. |
+| `free_memory(unload_models?, free_cache?)` | Unload models / free VRAM+RAM via `/free`, with before/after stat deltas. For long sessions that accumulate model families and start OOMing. |
+| `list_templates(query?, limit?)` | Browse ComfyUI's built-in templates (core Comfy-Org catalog + installed custom-node packages) — starting points for new workflows. |
+| `load_template(name, package?, ...)` | Load a template into the editor (snapshots first) or fetch/save it. Pair with `list_templates`. |
 
 ### Run / queue / status
 
 | Tool | Purpose |
 |---|---|
-| `run_workflow(workflow?, path?, overrides?, tab_id?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab; `path=` loads + runs a saved API-format template; `overrides={"node.input": val}` runs it with a new prompt/seed without editing the file. |
+| `run_workflow(workflow?, path?, overrides?, tab_id?, partial_targets?)` | Daily driver: queue + wait + return output file refs. No-args queues the open tab; `path=` loads + runs a saved API-format template; `overrides={"node.input": val}` runs it with a new prompt/seed without editing the file; `partial_targets=["9"]` runs just one output branch (re-tune a detailer without regenerating the base). |
 | `queue_workflow(workflow?, tab_id?, client_id?)` | Submit. No-args queues the open tab and forwards the tab's client_id for live previews. |
 | `validate_workflow(workflow)` | Dry-run: queue + immediate cancel. Returns enriched `node_errors`. |
 | `resolve_missing_models(workflow?)` | One-call diagnose: validate + fuzzy-match every missing model reference, returns a fix plan with `auto_fix` candidates. |
+| `resolve_missing_nodes(workflow?, path?)` | Node-pack analog: find uninstalled node classes, map each to its provider package via ComfyUI-Manager's registry, emit the `cm-cli` install command (doesn't auto-install). |
+| `diagnose_last_failure(prompt_id?)` | Explain the last errored run: failing node, classified cause (missing node / OOM / wrong-model / bad input), the tool that fixes it, and the log tail. |
 | `wait_for_completion(prompt_id, timeout, compact?)` | Block until done. Always-poll history fallback so it doesn't hang on missed WS events. `compact=True` (default) drops verbose history echo. |
 | `get_current_execution(timeout?)` | Snapshot: running prompt, current node + class, latest step progress. Non-blocking. |
 | `get_queue(compact?)` | List running + pending jobs. |
@@ -197,6 +204,7 @@ Once everything's wired:
 | `describe_workflow(path?, tab_id?, summary_only?)` | Workflow file summary: notes_in_canvas, sidecar_md, folder_notes, model_references, top_types. Pass nothing → describes the open tab. |
 | `catalog_workflows(dir?, query?, type_contains?, model_contains?, limit?)` | Bulk describe across a directory. Server-side filters keep responses small on big libraries. |
 | `generate_workflow_index(dir?, filename?)` | (Re)write a browsable `_index.md` catalog of the workflow library — model, key nodes, and first note per workflow, grouped by folder. Run after adding/renaming workflows. |
+| `draft_api_workflow(workflow?, path?)` | Best-effort UI→API draft for the common case: widgets, direct links, Reroute/PrimitiveNode/GetNode-SetNode indirection. Not a full converter — refuses subgraphs, flags anything unresolved in `warnings` instead of guessing. Follow up with `validate_workflow_models`. |
 
 ### Live co-edit (requires bridge)
 
@@ -334,7 +342,7 @@ The MCP needs to reach `COMFYUI_URL`. The bridge's `screenshot_canvas` and `appl
 ## Caveats and known limits
 
 - **Subgraphs (offline tools support; live ops don't)**: `describe_graph`, `edit_workflow`, `get_node_widgets`, `describe_workflow`, and `_extract_model_refs` recurse into subgraph definitions and accept path-style ids like `"59/68"` (node 68 inside subgraph instance 59). Live ops via the bridge (`add_node`, `connect_nodes`, `set_widget`) currently address top-level only — for inner-subgraph live edits, edit offline via path syntax then `apply_workflow` to push the updated graph back. Inner-node mutations affect the SHARED subgraph definition (all instances see the change).
-- **UI ↔ API conversion**: the MCP doesn't currently convert UI-format workflows to API format. ComfyUI does this in browser JS only. To queue a UI-format file, open it in the editor and `run_workflow()` (bridge has the API form), or export "Save (API Format)" first.
+- **UI ↔ API conversion**: `draft_api_workflow()` does a best-effort headless conversion — widgets, links, Reroute/Primitive/GetNode-SetNode indirection, and subgraph flattening (namespaced `<instance>:<inner>` ids, nested subgraphs included). It's a strong draft, not a byte-exact replica of ComfyUI's browser converter, so always follow it with `validate_workflow_models` before queuing; anything it can't resolve confidently (dangling links, exposed-widget overrides on a subgraph instance) is surfaced in `warnings`. For guaranteed fidelity, still prefer opening the file in the editor and `run_workflow()` (the bridge holds ComfyUI's own API form) or "Save (API Format)".
 - **Browser-driven cancels**: if you hit the Cancel button in ComfyUI mid-run, the MCP doesn't get notified in real time. `wait_for_completion` catches it via WS events; `get_history(prompt_id)` afterwards shows status `error` with `execution_interrupted`.
 - **`arrange_layout`**: depends on `LGraph.arrange()` existing in your ComfyUI build. On older versions you'll get a clear error; in that case compute positions yourself and call `move_node` per node.
 - **Concurrent MCP edits + manual edits**: the bridge debounces background pushes (800ms) but explicit ops push synchronously before responding (so `set_widget` → `run_workflow` is race-free). Multi-agent simultaneous writes can still race for last-writer-wins.
@@ -432,7 +440,7 @@ comfyui-mcp/
 ├── CLAUDE.md            # agent-facing context for Claude Code
 ├── src/comfyui_mcp/
 │   ├── __init__.py
-│   ├── server.py        # all 58 @mcp.tool() entry points
+│   ├── server.py        # all 66 @mcp.tool() entry points
 │   ├── client.py        # shared singleton ComfyClient
 │   ├── comfy.py         # httpx + websockets wrapper over ComfyUI REST/WS
 │   ├── core.py          # _comfy_root, _detect_format, _resolve_node_path, _subgraph_def
@@ -442,8 +450,10 @@ comfyui-mcp/
 │   ├── snapshots.py     # pre-apply snapshot save/restore
 │   ├── search.py        # search_nodes, search-related helpers
 │   ├── model_meta.py    # describe_model, model metadata
-│   ├── images.py        # image / preview helpers
+│   ├── images.py        # image / preview helpers, embedded-workflow extraction
+│   ├── convert.py       # best-effort UI→API draft + subgraph flattening
 │   └── logs.py          # tail_log, log helpers
+├── tests/               # offline unit tests (pytest) for the pure helpers
 ├── custom_nodes/comfyui-mcp-bridge/
 │   ├── __init__.py      # registers HTTP routes + middleware on ComfyUI
 │   └── web/mcp_bridge.js  # ComfyUI editor extension (JS, v0.9.0)

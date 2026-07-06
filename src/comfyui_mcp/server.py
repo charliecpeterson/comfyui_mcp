@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import copy
 import itertools
@@ -9,11 +10,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.fastmcp import Context, FastMCP, Image
+from mcp.types import ToolAnnotations
 
 from .client import comfy
 from .images import (
     _resize_image_for_inline,
+    _extract_embedded_workflow,
     _OPENPOSE_LIMB_PAIRS,
     _OPENPOSE_LIMB_COLORS,
     _OPENPOSE_JOINT_COLORS,
@@ -25,11 +28,13 @@ from .logs import (
     _traceback_block_above,
     _traceback_block_below,
     _walk_traceback,
+    _looks_like_missing_dependency,
 )
 from .search import (
     _SEARCH_STOPWORDS,
     _basename_no_ext,
     _score_query_match,
+    _score_query_match_partial,
     _fuzzy_match_list,
     _split_query_tokens,
     _score_model_path,
@@ -50,6 +55,8 @@ from .core import (
     _resolve_node_path,
     _outputs_to_files,
     _model_search_paths,
+    _find_comfy_pid,
+    _process_supervisor_info,
     TAB_DISCONNECT_HINT,
 )
 from .widgets import (
@@ -58,13 +65,16 @@ from .widgets import (
     _socket_type,
 )
 from .tabs import _workflow_from_tab, _queue_and_enrich
+from .comfy import _extract_execution_error
 from .summarize import (
     _extract_model_widget_refs,
     _valid_values_for_input,
+    _required_inputs_with_defaults,
     _describe_graph,
     _summarize_workflow_body,
     _describe_workflow_file,
 )
+from .convert import _draft_api_workflow
 from .snapshots import (
     _read_workflow_for_apply,
     _save_pre_apply_snapshot,
@@ -73,6 +83,13 @@ from . import civitai as _civitai
 from . import loras as _loras_mod
 
 mcp = FastMCP("comfyui-mcp")
+
+# MCP tool annotations let a client skip the permission prompt for tools that only read,
+# and flag the ones that replace/delete state. readOnlyHint => no side effects; destructive
+# => replaces or removes something (graphs are snapshotted first, so recoverable, but the
+# swap is still a mutation the user should see coming).
+_READ_ONLY = ToolAnnotations(readOnlyHint=True)
+_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
 
 # Frontend-only LiteGraph node classes — the browser editor knows them but they're
 # not in the backend's /object_info, so add_node skips the registry check for these.
@@ -119,13 +136,84 @@ def _apply_overrides(
     return wf, None
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_system_stats() -> dict[str, Any]:
     """Return ComfyUI system info: device, vram, python/comfy version. Use this as a smoke test."""
     return await comfy.system_stats()
 
 
+@mcp.tool(annotations=_READ_ONLY)
+def get_process_info() -> dict[str, Any]:
+    """Report how the running ComfyUI process is supervised — systemd (system- or
+    user-scoped), tmux, screen, docker, or a bare/detached process with nothing watching
+    it. Call this BEFORE trying to restart ComfyUI (e.g. after installing a custom node)
+    instead of manually cross-checking `ps`/`systemctl`/`journalctl` to figure out how it
+    was launched — a system-scoped systemd unit needs `sudo` to restart; a bare process
+    means relaunching its exact command yourself.
+
+    Finds the process listening on COMFYUI_URL's port (the same discovery `_comfy_root()`
+    uses) and inspects /proc/<pid>/cgroup plus its ancestor chain. Best-effort — permission
+    errors degrade to partial info rather than raising, and this only sees what the host
+    OS exposes (a ComfyUI running in a different container/namespace than this MCP won't
+    be introspectable here, same limitation as the other filesystem-reading tools).
+
+    Returns {pid, cmdline, supervisor: "systemd"|"docker"|"tmux"|"screen"|"bare_process"|
+    "unknown", detail?, systemd_scope?, restart_hint?, error?}.
+    """
+    pid = _find_comfy_pid()
+    if pid is None:
+        return {
+            "supervisor": "unknown",
+            "error": "could not find a process listening on COMFYUI_URL's port",
+        }
+    return _process_supervisor_info(pid)
+
+
+def _vram_free(stats: dict[str, Any]) -> int | None:
+    devices = stats.get("devices") or []
+    return devices[0].get("vram_free") if devices and isinstance(devices[0], dict) else None
+
+
 @mcp.tool()
+async def free_memory(unload_models: bool = True, free_cache: bool = True) -> dict[str, Any]:
+    """Ask ComfyUI to unload models and free VRAM/RAM — the fix for a long agent session
+    that has accumulated several model families in memory and is now OOMing or swapping.
+
+    Reach for this when switching between heavy model families in one session (e.g. a Wan
+    video checkpoint then an SDXL run), or when a run fails with an allocator/OOM error.
+    ComfyUI's smart-memory cache holds recently-used models resident; this clears them.
+    They reload from disk on the next run (a one-time latency cost), so don't call it
+    between iterations on the SAME workflow — only when changing models or recovering room.
+
+    Args:
+        unload_models: drop all loaded model weights from VRAM (POST /free unload_models).
+        free_cache: also reset the execution cache and force a gc pass (free_memory flag).
+
+    Returns {ok, vram_freed_bytes?, vram_free_before, vram_free_after, ram_free_before,
+    ram_free_after}. The unload runs on ComfyUI's worker thread; this waits briefly for it
+    to land before re-reading stats, so the deltas reflect the actual reclaim.
+    """
+    before = await comfy.system_stats()
+    res = await comfy.free(unload_models=unload_models, free_memory=free_cache)
+    if not res.get("ok"):
+        return {"ok": False, "error": f"/free returned status {res.get('status')}"}
+    await asyncio.sleep(2.0)  # let the worker thread consume the flag + gc
+    after = await comfy.system_stats()
+
+    vram_before, vram_after = _vram_free(before), _vram_free(after)
+    out: dict[str, Any] = {
+        "ok": True,
+        "vram_free_before": vram_before,
+        "vram_free_after": vram_after,
+        "ram_free_before": (before.get("system") or {}).get("ram_free"),
+        "ram_free_after": (after.get("system") or {}).get("ram_free"),
+    }
+    if isinstance(vram_before, int) and isinstance(vram_after, int):
+        out["vram_freed_bytes"] = vram_after - vram_before
+    return out
+
+
+@mcp.tool(annotations=_READ_ONLY)
 async def search_nodes(
     query: str = "",
     input_type: str = "",
@@ -147,6 +235,13 @@ async def search_nodes(
     category, OR description. Results ranked by where the match occurred (name > category
     > description) and by exact-match strength.
 
+    Stacking too many alternative/synonym concepts in one query (e.g. every near-name for
+    a feature: "ipadapter face id instantid pulid") can legitimately match nothing under
+    strict AND semantics even when relevant nodes exist. When that happens this falls back
+    to OR-scoring (any token matching counts) and tags every result `"partial_match": True`
+    so you can tell the difference — prefer a short 1-2 concept query up front instead of
+    relying on the fallback.
+
     Examples:
       search_nodes("upscale image with model") → finds ImageUpscaleWithModel etc.
       search_nodes("ksampler", output_type="LATENT")
@@ -158,7 +253,7 @@ async def search_nodes(
         output_type: socket type a node must produce.
         limit: max results.
 
-    Returns: list of {name, category, description, inputs, outputs, score}.
+    Returns: list of {name, category, description, inputs, outputs, score, partial_match?}.
     Description truncated to 200 chars; call get_object_info(class_name) for the full record.
     """
     info = await comfy.object_info()
@@ -166,42 +261,46 @@ async def search_nodes(
     out_t = output_type.upper()
     tokens = [t for t in query.lower().split() if t and t not in _SEARCH_STOPWORDS]
 
-    scored: list[tuple[int, dict[str, Any]]] = []
-    for name, node in info.items():
-        category = node.get("category") or ""
-        description = node.get("description") or ""
+    def run(score_fn, partial: bool) -> list[tuple[int, dict[str, Any]]]:
+        out: list[tuple[int, dict[str, Any]]] = []
+        for name, node in info.items():
+            category = node.get("category") or ""
+            description = node.get("description") or ""
 
-        score = _score_query_match(name, category, description, tokens) if tokens else 1
-        if score == 0:
-            continue
+            score = score_fn(name, category, description, tokens) if tokens else 1
+            if score == 0:
+                continue
 
-        inputs = _flatten_inputs(node.get("input", {}))
-        outputs = list(node.get("output", []) or [])
+            inputs = _flatten_inputs(node.get("input", {}))
+            outputs = list(node.get("output", []) or [])
 
-        if in_t and not any(_socket_type(t) == in_t for _, t in inputs):
-            continue
-        if out_t and out_t not in (_socket_type(t) for t in outputs):
-            continue
+            if in_t and not any(_socket_type(t) == in_t for _, t in inputs):
+                continue
+            if out_t and out_t not in (_socket_type(t) for t in outputs):
+                continue
 
-        scored.append(
-            (
-                score,
-                {
-                    "name": name,
-                    "category": category,
-                    "description": description[:200] if description else "",
-                    "inputs": [{"name": n, "type": _socket_type(t)} for n, t in inputs],
-                    "outputs": [_socket_type(t) for t in outputs],
-                    "score": score,
-                },
-            )
-        )
+            entry = {
+                "name": name,
+                "category": category,
+                "description": description[:200] if description else "",
+                "inputs": [{"name": n, "type": _socket_type(t)} for n, t in inputs],
+                "outputs": [_socket_type(t) for t in outputs],
+                "score": score,
+            }
+            if partial:
+                entry["partial_match"] = True
+            out.append((score, entry))
+        return out
+
+    scored = run(_score_query_match, partial=False)
+    if not scored and tokens:
+        scored = run(_score_query_match_partial, partial=True)
 
     scored.sort(key=lambda x: (-x[0], x[1]["name"]))
     return [r for _, r in scored[:limit]]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_current_execution(timeout: int = 1) -> dict[str, Any]:
     """Snapshot of what ComfyUI is doing right now, for non-blocking progress checks.
 
@@ -282,6 +381,7 @@ async def queue_workflow(
     workflow: dict[str, Any] | None = None,
     tab_id: str = "",
     client_id: str = "",
+    partial_targets: list[str] | None = None,
 ) -> dict[str, Any]:
     """Submit a workflow for execution. Prefer the no-args form when possible.
 
@@ -293,6 +393,9 @@ async def queue_workflow(
     user's tab and they have no UI-side visibility into it. Most flows that reach
     for `workflow=` are reconstructing a graph the user already has — check
     catalog_workflows() first, or modify the open tab via set_widget instead.
+
+    `partial_targets` (list of OUTPUT node id strings) runs only those nodes and their
+    upstream dependencies — see run_workflow for the iterate-on-one-branch pattern.
 
     On success returns {ok: true, prompt_id, number, node_errors}. On validation
     failure returns {ok: false, error, node_errors} (with valid_values backfilled
@@ -312,10 +415,12 @@ async def queue_workflow(
             "error": "workflow appears to be UI format; need API format",
             "node_errors": {},
         }
-    return await _queue_and_enrich(workflow, client_id=effective_client_id)
+    return await _queue_and_enrich(
+        workflow, client_id=effective_client_id, partial_execution_targets=partial_targets
+    )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_history(
     prompt_id: str = "",
     max_items: int = 10,
@@ -344,7 +449,7 @@ async def get_history(
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def view_image(filename: str, subfolder: str = "", type: str = "output") -> Any:
     """Image-only alias for view_file. Returns inline Image content for png/jpg/webp/gif;
     errors on non-image content types. Prefer view_file for general use (handles video/audio
@@ -500,7 +605,7 @@ async def batch_run(
     return {"mode": mode, "count": len(runs), "runs": runs}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def describe_workflow(
     path: str = "",
     summary_only: bool = False,
@@ -531,7 +636,7 @@ async def describe_workflow(
     return _describe_workflow_file(path, summary_only)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def catalog_workflows(
     dir: str = "",
     recursive: bool = True,
@@ -548,7 +653,10 @@ def catalog_workflows(
     truncated), sidecar_md (first 800 chars), model_references, error?}.
 
     Server-side filtering (case-insensitive, all optional, AND-combined):
-      query: substring match against rel_path / notes / sidecar / top_types names.
+      query: tokenized match against rel_path / notes / sidecar / top_types — split on
+             whitespace/underscore/dash, every token must appear somewhere (each token
+             independently, not the literal phrase — "wan i2v" matches
+             "wan/wan_i2v_wan2-animate.json" even though the file has no space).
              Pre-prune the catalog to only workflows that look relevant.
       type_contains: only entries whose top_types include this substring
                      (e.g. "ControlNet", "FaceDetailer", "LoraLoader").
@@ -564,7 +672,7 @@ def catalog_workflows(
     if not base.is_dir():
         return {"root": str(base), "error": "not a directory"}
 
-    q = query.lower()
+    q_tokens = _split_query_tokens(query)
     type_q = type_contains.lower()
     model_q = model_contains.lower()
 
@@ -593,9 +701,9 @@ def catalog_workflows(
         ).lower()
         sidecar_str = (summary.get("sidecar_md") or "").lower() if isinstance(summary.get("sidecar_md"), str) else ""
 
-        if q:
-            if q not in rel_path.lower() and q not in top_types_str \
-               and q not in notes_str and q not in sidecar_str:
+        if q_tokens:
+            blob = f"{rel_path.lower()} {top_types_str} {notes_str} {sidecar_str}"
+            if not all(tok in blob for tok in q_tokens):
                 continue
         if type_q and type_q not in top_types_str:
             continue
@@ -683,7 +791,120 @@ def generate_workflow_index(dir: str = "", filename: str = "_index.md") -> dict[
             "folders": {f: len(v) for f, v in sorted(by_folder.items())}}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
+async def list_templates(query: str = "", limit: int = 40) -> dict[str, Any]:
+    """Browse ComfyUI's built-in workflow templates — the curated starting points that
+    ship with ComfyUI core and with installed custom_node packages.
+
+    Use this when the user wants to START something new ("set up a Wan i2v workflow",
+    "give me a FaceDetailer example") and their own library (catalog_workflows) has no
+    close match. Templates are known-good, model-appropriate graphs; loading one and
+    tweaking beats building from search_nodes. For the user's OWN saved workflows, use
+    catalog_workflows instead — this is the shipped-template catalog, not their library.
+
+    `query` filters case-insensitively across template name, title, and description
+    (whitespace-split, every token must match somewhere). Empty lists everything.
+
+    Returns {count, templates: [{name, title, description, source: "core"|"<package>",
+    models?, tags?}, ...]}. Pass a template's `name` (and `package` for a non-core one)
+    to load_template to drop it into the editor.
+    """
+    tokens = [t for t in query.lower().split() if t]
+
+    def matches(*fields: str) -> bool:
+        if not tokens:
+            return True
+        hay = " ".join(f.lower() for f in fields if f)
+        return all(t in hay for t in tokens)
+
+    templates: list[dict[str, Any]] = []
+    try:
+        for cat in await comfy.core_templates():
+            for t in cat.get("templates") or []:
+                title, desc = t.get("title") or "", t.get("description") or ""
+                if matches(t.get("name") or "", title, desc, cat.get("title") or ""):
+                    entry = {"name": t.get("name"), "title": title, "description": desc[:200],
+                             "source": "core", "category": cat.get("title")}
+                    if t.get("models"):
+                        entry["models"] = [m.get("name") for m in t["models"] if isinstance(m, dict)][:6]
+                    if t.get("tags"):
+                        entry["tags"] = t["tags"]
+                    templates.append(entry)
+    except Exception as e:
+        templates.append({"error": f"core template index unavailable: {e}"})
+
+    try:
+        for package, names in (await comfy.workflow_templates()).items():
+            for name in names:
+                if matches(name, package):
+                    templates.append({"name": name, "title": name, "source": package})
+    except Exception:
+        pass  # custom-node templates are a bonus; core is the main event
+
+    real = [t for t in templates if "error" not in t]
+    return {"count": len(real), "templates": real[:limit],
+            **({"warnings": [t for t in templates if "error" in t]} if any("error" in t for t in templates) else {})}
+
+
+@mcp.tool(annotations=_DESTRUCTIVE)
+async def load_template(
+    name: str,
+    package: str = "",
+    tab_id: str = "",
+    apply_to_tab: bool = True,
+    save_path: str = "",
+) -> dict[str, Any]:
+    """Load a built-in template (from list_templates) into the editor as a starting point.
+
+    Fetches the template's UI-format graph and, by default, applies it to the open tab
+    (snapshotting the current graph first, same as apply_workflow — restore_snapshot undoes
+    it). This is the "start me from a known-good X" action: load, then set_widget your
+    prompt/model/seed and run_workflow.
+
+    Args:
+        name: the template `name` from list_templates.
+        package: for a custom_node template, its source package (the `source` field from
+                 list_templates); omit for a core template.
+        tab_id: target a specific tab; empty broadcasts to all live tabs.
+        apply_to_tab: push it into the browser editor (default). Set False to just fetch it.
+        save_path: also write the UI JSON here (relative paths resolve under the workflows
+                   dir). Useful to fork a template into the user's library.
+
+    Returns {ok, name, source, node_count, applied_to?, snapshot_path?, saved_path?,
+    workflow?} — `workflow` (the UI graph) is included only when apply_to_tab is False.
+    """
+    try:
+        wf = await (comfy.workflow_template(package, name) if package else comfy.core_template(name))
+    except Exception as e:
+        return {"ok": False, "error": f"could not fetch template {name!r}"
+                f"{f' from {package}' if package else ''}: {e}"}
+
+    fmt, count = _detect_format(wf)
+    out: dict[str, Any] = {"ok": True, "name": name, "source": package or "core", "node_count": count}
+
+    if save_path:
+        p = Path(save_path).expanduser()
+        if not p.is_absolute():
+            p = _comfy_root() / "user" / "default" / "workflows" / save_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(wf, indent=2))
+        out["saved_path"] = str(p)
+
+    if apply_to_tab:
+        snapshot_meta = await _save_pre_apply_snapshot(tab_id=tab_id or None)
+        result = await comfy.bridge_load(wf, tab_id=tab_id or None, confirm=True)
+        if not (isinstance(result, dict) and result.get("ok")):
+            return {"ok": False, "error": "fetched template but could not apply to a tab",
+                    "bridge_result": result, "hint": TAB_DISCONNECT_HINT}
+        out["applied_to"] = result.get("queued_to") or result.get("applied_to")
+        if snapshot_meta.get("path"):
+            out["snapshot_path"] = snapshot_meta["path"]
+    else:
+        out["workflow"] = wf
+    return out
+
+
+@mcp.tool(annotations=_READ_ONLY)
 async def describe_graph(
     workflow: dict[str, Any] | None = None,
     tab_id: str = "",
@@ -769,7 +990,7 @@ async def _attach_widgets(summary: dict[str, Any], workflow: dict[str, Any]) -> 
             entry["widgets_values"] = raw  # raw fallback when no schema available
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def describe_subgraph(
     definition_id: str = "",
     tab_id: str = "",
@@ -880,7 +1101,7 @@ async def describe_subgraph(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def inspect_subgraph_instance(
     node_id: int,
     tab_id: str = "",
@@ -1025,7 +1246,7 @@ async def add_node(
     return {**result, "connections": conn_result}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 async def delete_node(node_id: int, tab_id: str = "") -> dict[str, Any]:
     """Delete a node from the live ComfyUI tab. Auto-disconnects its links."""
     return await comfy.bridge_op({"op": "delete_node", "node_id": node_id}, tab_id=tab_id or None)
@@ -1173,7 +1394,7 @@ async def arrange_layout(tab_id: str = "") -> dict[str, Any]:
     return await comfy.bridge_op({"op": "arrange_layout"}, tab_id=tab_id or None)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def screenshot_canvas(tab_id: str = "", timeout: int = 10) -> Any:
     """Capture the LiteGraph canvas of an open ComfyUI tab as a PNG, returned inline.
 
@@ -1221,7 +1442,7 @@ def save_workflow(
     return {"path": str(p), "format": fmt, "node_count": count, "bytes_written": len(text.encode("utf-8"))}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 async def cancel_job(prompt_id: str = "") -> dict[str, Any]:
     """Cancel a queued or running ComfyUI job.
 
@@ -1236,7 +1457,7 @@ async def cancel_job(prompt_id: str = "") -> dict[str, Any]:
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_queue(compact: bool = True) -> dict[str, Any]:
     """List ComfyUI's running and pending jobs.
 
@@ -1271,7 +1492,7 @@ async def get_queue(compact: bool = True) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def compare_images(
     files: list[dict[str, str]],
     layout: str = "horizontal",
@@ -1362,7 +1583,7 @@ async def compare_images(
     return Image(data=buf.getvalue(), format="jpeg")
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def view_video(
     filename: str,
     frames: int = 6,
@@ -1453,7 +1674,7 @@ async def view_video(
     return Image(data=buf.getvalue(), format="jpeg")
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def view_file(
     filename: str,
     subfolder: str = "",
@@ -1511,7 +1732,7 @@ async def view_file(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_node_widgets(node_id: str, tab_id: str = "") -> dict[str, Any]:
     """Token-efficient: read just one node's widget values from the open tab.
 
@@ -1562,7 +1783,7 @@ async def get_node_widgets(node_id: str, tab_id: str = "") -> dict[str, Any]:
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_open_workflow(format: str = "summary", tab_id: str = "") -> dict[str, Any]:
     """Inspect the workflow open in the user's ComfyUI browser tab(s).
 
@@ -1636,7 +1857,7 @@ async def get_open_workflow(format: str = "summary", tab_id: str = "") -> dict[s
     return {"workflow": chosen, "format": format, **common_meta}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def bridge_debug() -> dict[str, Any]:
     """Diagnostic dump of the comfyui-mcp-bridge state.
 
@@ -1647,7 +1868,7 @@ async def bridge_debug() -> dict[str, Any]:
     return await comfy.bridge_debug()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 async def apply_workflow(
     workflow: dict[str, Any] | None = None,
     path: str = "",
@@ -1711,7 +1932,7 @@ async def apply_workflow(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 async def restore_snapshot(
     tab_id: str = "",
     index: int = 0,
@@ -1766,7 +1987,7 @@ async def restore_snapshot(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def list_snapshots(tab_id: str = "") -> dict[str, Any]:
     """List available pre-apply snapshots, optionally for one tab.
 
@@ -1807,20 +2028,43 @@ def list_snapshots(tab_id: str = "") -> dict[str, Any]:
     return {"snap_dir": str(snap_dir), "count": len(out), "snapshots": out}
 
 
+def _progress_sink(ctx: Context | None):
+    """Adapt ComfyUI's WS progress events to MCP's report_progress so a long render shows
+    a live bar in the client instead of a silent block. Returns None when there's no client
+    context (e.g. direct calls/tests) or no progress token, so comfy.wait skips the callback."""
+    if ctx is None:
+        return None
+
+    async def sink(p: dict[str, Any]) -> None:
+        val, mx = p.get("value"), p.get("max")
+        if isinstance(val, (int, float)) and isinstance(mx, (int, float)) and mx:
+            node = p.get("node")
+            await ctx.report_progress(float(val), float(mx), message=f"node {node}" if node else None)
+
+    return sink
+
+
 @mcp.tool()
 async def wait_for_completion(
     prompt_id: str,
     timeout: int = 300,
     compact: bool = True,
     strip_warnings: bool = False,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Wait for a queued workflow to finish via ComfyUI's WebSocket stream.
 
-    Returns {status, output_files?, history?, error?, progress?} where status is one of:
+    Returns {status, output_files?, history?, error?, hint?, progress?} where status is one of:
       "completed" — finished successfully; `output_files` is a flat list of
                     {node_id, kind, filename, subfolder, type} that you can pass
                     directly to view_file/view_image without a separate get_history.
-      "error"     — runtime failure; error holds node_id/exception_type/exception_message/traceback.
+      "error"     — runtime failure, whether caught live via WS or discovered on the
+                    history-poll safety net (both are normalized the same way now —
+                    a failed run never comes back as "completed"). `error` holds
+                    node_id/exception_type/exception_message/traceback. If the message
+                    reads like a missing custom_node package or Python dependency
+                    (rather than a bad input), `hint` points you at
+                    `list_failed_imports()` instead of re-running the same workflow.
       "interrupted" — user/agent cancelled.
       "timeout"   — deadline hit; progress holds the last (value, max, node) seen.
 
@@ -1835,7 +2079,7 @@ async def wait_for_completion(
                         Set when a custom node logs the entire Gemma3 weight list
                         (~70KB) and the wait result becomes unreadable.
     """
-    result = await comfy.wait(prompt_id, timeout=float(timeout))
+    result = await comfy.wait(prompt_id, timeout=float(timeout), on_progress=_progress_sink(ctx))
     if result.get("status") == "completed":
         history = result.get("history") or {}
         result["output_files"] = _outputs_to_files(history)
@@ -1848,13 +2092,106 @@ async def wait_for_completion(
         if strip_warnings:
             history = _strip_history_warnings(history)
         result["history"] = history
-    elif strip_warnings and result.get("status") == "error":
-        # Errors carry their own message field; if it ever embeds noise, scrub there too
+    elif result.get("status") == "error":
         err = result.get("error")
-        if isinstance(err, dict) and isinstance(err.get("traceback"), list):
-            err = {**err, "traceback": [ln for ln in err["traceback"] if not _is_log_noise(ln)]}
-            result["error"] = err
+        if isinstance(err, dict):
+            if strip_warnings and isinstance(err.get("traceback"), list):
+                # Errors carry their own message field; if it ever embeds noise, scrub there too
+                err = {**err, "traceback": [ln for ln in err["traceback"] if not _is_log_noise(ln)]}
+                result["error"] = err
+            if _looks_like_missing_dependency(err.get("exception_message") or ""):
+                result["hint"] = (
+                    "This looks like a missing custom_node package or Python dependency, not "
+                    "a bad input — call list_failed_imports() to see the actual startup import "
+                    "error before retrying the workflow."
+                )
     return result
+
+
+def _classify_failure(exc_type: str, msg: str, node_type: str) -> dict[str, str]:
+    """Map a runtime failure to the tool that actually fixes it, so the agent stops
+    re-running the same broken graph. Returns {category, next_step}."""
+    low = msg.lower()
+    if _looks_like_missing_dependency(msg):
+        return {"category": "missing_node_or_dependency",
+                "next_step": "call resolve_missing_nodes() to identify the package, or "
+                             "list_failed_imports() for the startup import traceback."}
+    if any(k in low for k in ("out of memory", "cuda error", "cublas", "alloc", "oom")):
+        return {"category": "out_of_memory",
+                "next_step": "call free_memory() to unload models, then retry — or reduce "
+                             "resolution/batch size."}
+    if any(k in low for k in ("state_dict", "size mismatch", "missing key", "unexpected key",
+                              "no such file", "not found", "errno 2")):
+        return {"category": "model_mismatch_or_missing_file",
+                "next_step": "the model file is wrong or absent for this node — call "
+                             "resolve_missing_models() to find the right file, or check the "
+                             f"model widget on the {node_type} node."}
+    return {"category": "bad_input_or_runtime",
+            "next_step": "inspect current_inputs below and the node's widgets; this is a "
+                         "value/logic error, not a missing-file problem — fix the input, "
+                         "don't just re-run."}
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def diagnose_last_failure(prompt_id: str = "", log_lines: int = 40) -> dict[str, Any]:
+    """Explain why the most recent run failed and what to do next — one call instead of
+    stitching together get_history + tail_log + guessing.
+
+    Reach for this right after a run comes back with status "error" (or when the user says
+    "it failed, why?"). It pulls the execution_error from history, names the failing node,
+    classifies the failure (missing node/dependency, OOM, wrong/missing model file, or a
+    plain bad input), and points at the specific tool that fixes that class of problem so
+    you don't just re-run the same broken graph.
+
+    Args:
+        prompt_id: a specific run to diagnose. Empty = the most recent errored run in history.
+        log_lines: how many lines of the ComfyUI log tail to include for extra context.
+
+    Returns {ok: false, prompt_id, node_id, node_type, exception_type, exception_message,
+    category, next_step, current_inputs?, traceback_tail, log_tail} — or {ok: true} with a
+    note if the target run actually succeeded, or {error} if nothing matched.
+    """
+    if prompt_id:
+        h = await comfy.history(prompt_id)
+        entry = h.get(prompt_id) if isinstance(h, dict) else None
+    else:
+        h = await comfy.history(max_items=40)
+        entry, prompt_id = None, ""
+        # history is insertion-ordered oldest→newest; take the last errored one
+        for pid, e in (h.items() if isinstance(h, dict) else []):
+            if (e.get("status") or {}).get("status_str") == "error":
+                entry, prompt_id = e, pid
+    if entry is None:
+        return {"error": "no matching run found" if prompt_id else "no failed runs in recent history"}
+
+    if (entry.get("status") or {}).get("status_str") != "error":
+        return {"ok": True, "prompt_id": prompt_id,
+                "note": "this run did not fail — status is "
+                        f"{(entry.get('status') or {}).get('status_str')!r}"}
+
+    err = _extract_execution_error(entry) or {}
+    exc_type = err.get("exception_type") or ""
+    msg = err.get("exception_message") or ""
+    node_type = err.get("node_type") or ""
+    traceback = err.get("traceback") or []
+
+    out: dict[str, Any] = {
+        "ok": False,
+        "prompt_id": prompt_id,
+        "node_id": err.get("node_id"),
+        "node_type": node_type,
+        "exception_type": exc_type,
+        "exception_message": msg,
+        **_classify_failure(exc_type, msg, node_type),
+        "traceback_tail": traceback[-8:] if isinstance(traceback, list) else traceback,
+    }
+    if isinstance(err.get("current_inputs"), dict):
+        out["current_inputs"] = err["current_inputs"]
+    try:
+        out["log_tail"] = tail_log(lines=log_lines).get("lines")
+    except Exception:
+        pass
+    return out
 
 
 @mcp.tool()
@@ -2155,7 +2492,7 @@ async def upload_input(
     return await comfy.upload(path, name=name or None, subfolder=subfolder, overwrite=overwrite)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def tail_log(
     lines: int = 200,
     path: str = "",
@@ -2318,7 +2655,108 @@ async def resolve_missing_models(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
+async def resolve_missing_nodes(
+    workflow: dict[str, Any] | None = None,
+    path: str = "",
+    tab_id: str = "",
+) -> dict[str, Any]:
+    """Diagnose the "workflow needs custom nodes I don't have installed" case: find every
+    node class in a workflow that ComfyUI doesn't know, map it to the package that provides
+    it (via ComfyUI-Manager's registry), and return an install plan.
+
+    The node-class analog of resolve_missing_models. Use it when a shared workflow won't
+    load because of "unknown node type" / red missing nodes, or after wait_for_completion
+    returns an error that looks like a missing node rather than a bad input. Accepts UI or
+    API format (a UI workflow from read_workflow works — you don't need to convert first).
+
+    This does NOT auto-install. ComfyUI-Manager gates git-URL and pip installs behind
+    `allow_git_url_install` / `allow_pip_install` (both default off), so this returns the
+    exact command to run instead — respecting that security posture. Install via the
+    ComfyUI-Manager UI ("Install Missing Custom Nodes"), or run the emitted cm-cli command,
+    then restart ComfyUI (get_process_info tells you how it's supervised).
+
+    Returns:
+      {ok: true if nothing missing,
+       missing: [{class_type, node_ids: [...], provider, provider_title, install_cmd}, ...],
+       unresolved: [class_type, ...],   # unknown to Manager's registry too
+       install_cmds: [<dedup cm-cli lines>],
+       manager_available: bool}
+    """
+    if workflow is None and path:
+        read = read_workflow(path)
+        if "error" in read:
+            return {"ok": False, "error": read["error"], "path": read.get("path")}
+        workflow = read["workflow"]
+    if workflow is None:
+        wf, _state, err = await _workflow_from_tab(tab_id=tab_id, want_api=False)
+        if err:
+            return err
+        workflow = wf  # type: ignore[assignment]
+
+    # Collect (class_type -> node_ids) across both formats, recursing into subgraphs.
+    used: dict[str, list[Any]] = {}
+    fmt, _ = _detect_format(workflow)
+    if fmt == "api":
+        for nid, node in workflow.items():
+            ct = node.get("class_type") if isinstance(node, dict) else None
+            if ct:
+                used.setdefault(ct, []).append(nid)
+    else:
+        for node in _all_nodes(workflow):
+            ct = node.get("type")
+            if ct and not _subgraph_def(workflow, ct):  # skip subgraph-instance pseudo-types
+                used.setdefault(ct, []).append(node.get("id"))
+
+    info = await comfy.object_info()
+    installed = set(info.keys()) | _FRONTEND_ONLY_NODES
+    missing_types = {ct: ids for ct, ids in used.items() if ct not in installed}
+    if not missing_types:
+        return {"ok": True, "missing": [], "unresolved": [], "install_cmds": [],
+                "manager_available": True}
+
+    mappings = await comfy.manager_node_mappings()
+    class_to_provider: dict[str, tuple[str, str]] = {}
+    if mappings:
+        for provider, val in mappings.items():
+            if not (isinstance(val, list) and val and isinstance(val[0], list)):
+                continue
+            title = val[1].get("title_aux", provider) if len(val) > 1 and isinstance(val[1], dict) else provider
+            for cls in val[0]:
+                class_to_provider.setdefault(cls, (provider, title))
+
+    missing: list[dict[str, Any]] = []
+    unresolved: list[str] = []
+    install_cmds: list[str] = []
+    for ct, ids in sorted(missing_types.items()):
+        prov = class_to_provider.get(ct)
+        if prov is None:
+            unresolved.append(ct)
+            continue
+        provider, title = prov
+        cmd = f"python cm-cli.py install '{provider}'"
+        missing.append({"class_type": ct, "node_ids": ids, "provider": provider,
+                        "provider_title": title, "install_cmd": cmd})
+        if cmd not in install_cmds:
+            install_cmds.append(cmd)
+
+    return {
+        "ok": False,
+        "missing": missing,
+        "unresolved": unresolved,
+        "install_cmds": install_cmds,
+        "manager_available": mappings is not None,
+        "hint": (
+            "Run each install_cmd from <ComfyUI>/custom_nodes/comfyui-manager/, or use the "
+            "Manager UI's 'Install Missing Custom Nodes', then restart ComfyUI."
+            if mappings is not None else
+            "ComfyUI-Manager isn't installed, so providers couldn't be identified — install "
+            "it (github.com/Comfy-Org/ComfyUI-Manager) to resolve node packages automatically."
+        ),
+    }
+
+
+@mcp.tool(annotations=_READ_ONLY)
 def describe_model(path: str, category: str = "") -> dict[str, Any]:
     """Read metadata from a local model file without loading it.
 
@@ -2437,6 +2875,8 @@ async def run_workflow(
     tab_id: str = "",
     wait_seconds: int = 300,
     strip_warnings: bool = False,
+    partial_targets: list[str] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Daily-driver: queue + wait + return output file references in one call.
 
@@ -2482,6 +2922,14 @@ async def run_workflow(
       where status is "completed" | "error" | "interrupted" | "timeout".
       saved_workflow_path is set only when `workflow=` was passed explicitly.
 
+    Pass `partial_targets` to execute only part of the graph: a list of OUTPUT node ids
+    (as strings, e.g. ["9"]) — ComfyUI runs just those nodes and their upstream
+    dependencies, skipping every other branch. This is the iterate-on-one-branch loop:
+    re-run only the FaceDetailer/upscale/save node you're tuning without paying to
+    regenerate the base image feeding it (ComfyUI reuses the cached upstream results).
+    Give the id of the terminal node of the branch you want, not the node you changed.
+    Requires ComfyUI frontend >= 1.23.4 (all recent builds).
+
     Long runs (>30s): this tool blocks. Either run in the background or split into
     queue_workflow() + wait_for_completion() so the user sees progress.
     """
@@ -2508,7 +2956,9 @@ async def run_workflow(
     if fmt != "api":
         return {"ok": False, "error": f"workflow must be API format; got {fmt}"}
 
-    queued = await _queue_and_enrich(workflow, client_id=effective_client_id)
+    queued = await _queue_and_enrich(
+        workflow, client_id=effective_client_id, partial_execution_targets=partial_targets
+    )
     if not queued.get("ok"):
         return queued
 
@@ -2530,7 +2980,7 @@ async def run_workflow(
             pass
 
     t0 = time.monotonic()
-    result = await comfy.wait(prompt_id, timeout=float(wait_seconds))
+    result = await comfy.wait(prompt_id, timeout=float(wait_seconds), on_progress=_progress_sink(ctx))
     elapsed = round(time.monotonic() - t0, 1)
 
     out: dict[str, Any] = {
@@ -2565,7 +3015,7 @@ async def run_workflow(
     return out
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def find_model(query: str, category: str = "", limit: int = 20) -> dict[str, Any]:
     """Fuzzy-find an installed model by filename across model categories.
 
@@ -2657,21 +3107,29 @@ async def validate_workflow_models(
     workflow: dict[str, Any] | None = None,
     tab_id: str = "",
 ) -> dict[str, Any]:
-    """Pre-flight every model widget in a workflow against ComfyUI's installed lists.
+    """Pre-flight every model widget AND every required input in a workflow against
+    ComfyUI's installed lists and currently-registered node schemas.
 
     Faster than `resolve_missing_models` (which submits + cancels a queue trip): walks
     the workflow's model references and asks /object_info directly for each loader's
     valid_values list. No queue side-effects, no race against currently-running jobs.
 
     Use BEFORE queue_workflow to catch path issues like the "ltx2/<file>" subfolder
-    case — every node_id, slot, value, and resolution status in one pass.
+    case — every node_id, slot, value, and resolution status in one pass. Also catches
+    the "workflow was saved against an older ComfyUI/node version" class of bug: a node
+    gaining a new required input (e.g. ImageScaleToTotalPixels adding `resolution_steps`)
+    that a saved API-format template predates. Without this check that only surfaces as
+    a rejected /prompt after a full queue round-trip.
 
     With no args, validates the workflow open in the most-recently-edited tab.
     Pass `workflow` (UI or API format) for an offline check or `tab_id` for a specific tab.
+    The missing-required-input check only runs for API format — UI format's widgets_values
+    are positional, so there's no principled way to tell "an input absent from this array
+    entirely" apart from "aligned against the wrong length guess".
 
     Returns:
       {
-        ok: false if any reference is unresolved (true if all resolve),
+        ok: false if anything is unresolved or missing (true if everything checks out),
         format,
         checked: <count>,
         resolved: [{node_id, class_type, input_name, value}, ...],
@@ -2680,6 +3138,9 @@ async def validate_workflow_models(
         unknown_loader: [{node_id, class_type, value, reason}, ...]
             — references where /object_info had no valid-values list (custom node we
               can't introspect, or the input type isn't a combo).
+        missing_required: [{node_id, class_type, input_name, type, default}, ...]
+            — required inputs absent from the node entirely (API format only). `default`
+              is filled in from the node's schema when it declares one.
       }
     """
     if workflow is None:
@@ -2692,28 +3153,59 @@ async def validate_workflow_models(
     if fmt == "unknown":
         return {"ok": False, "error": "workflow is not a recognizable format", "format": fmt}
 
+    info_cache: dict[str, Any] = {}
+
+    async def spec_for(class_type: str) -> dict[str, Any] | None:
+        if class_type not in info_cache:
+            try:
+                oi = await comfy.object_info(class_type)
+                info_cache[class_type] = oi.get(class_type) if isinstance(oi, dict) else None
+            except Exception:
+                info_cache[class_type] = None
+        return info_cache[class_type]
+
+    missing_required: list[dict[str, Any]] = []
+    if fmt == "api":
+        for node_id, node in workflow.items():
+            if not isinstance(node, dict):
+                continue
+            class_type = node.get("class_type")
+            if not class_type:
+                continue
+            spec = await spec_for(class_type)
+            if not spec:
+                continue
+            present = node.get("inputs") or {}
+            for name, decl in _required_inputs_with_defaults(spec).items():
+                if name not in present:
+                    missing_required.append({
+                        "node_id": node_id,
+                        "class_type": class_type,
+                        "input_name": name,
+                        "type": decl["type"],
+                        "default": decl["default"],
+                    })
+
     refs = _extract_model_widget_refs(workflow, fmt)
     if not refs:
-        return {"ok": True, "format": fmt, "checked": 0, "resolved": [], "unresolved": [],
-                "note": "no model widget references found"}
+        return {
+            "ok": len(missing_required) == 0,
+            "format": fmt, "checked": 0, "resolved": [], "unresolved": [],
+            "unknown_loader": [], "missing_required": missing_required,
+            "note": "no model widget references found",
+        }
 
-    info_cache: dict[str, Any] = {}
     resolved: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
     unknown_loader: list[dict[str, Any]] = []
 
     for ref in refs:
         class_type = ref["class_type"]
-        if class_type not in info_cache:
-            try:
-                oi = await comfy.object_info(class_type)
-                info_cache[class_type] = oi.get(class_type) if isinstance(oi, dict) else None
-            except Exception as e:
-                info_cache[class_type] = None
-                unknown_loader.append({**ref, "reason": f"object_info failed: {e}"})
-                continue
+        spec = await spec_for(class_type)
+        if spec is None:
+            unknown_loader.append({**ref, "reason": "object_info failed or class unknown"})
+            continue
 
-        spec = info_cache.get(class_type) or {}
         valid = _valid_values_for_input(spec, ref["input_name"])
         if not isinstance(valid, list):
             unknown_loader.append({**ref, "reason": "input has no combo valid_values list"})
@@ -2733,16 +3225,17 @@ async def validate_workflow_models(
         })
 
     return {
-        "ok": len(unresolved) == 0,
+        "ok": len(unresolved) == 0 and len(missing_required) == 0,
         "format": fmt,
         "checked": len(refs),
         "resolved": resolved,
         "unresolved": unresolved,
         "unknown_loader": unknown_loader,
+        "missing_required": missing_required,
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def list_models(category: str = "") -> dict[str, Any]:
     """List models registered with ComfyUI (respects extra_model_paths.yaml).
 
@@ -2756,7 +3249,7 @@ async def list_models(category: str = "") -> dict[str, Any]:
     return {"category": category or None, "items": data}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def list_workflows(dir: str = "") -> dict[str, Any]:
     """Recursively list .json workflow files under a directory.
 
@@ -2768,16 +3261,29 @@ def list_workflows(dir: str = "") -> dict[str, Any]:
     return _walk_json(base)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def read_workflow(path: str) -> dict[str, Any]:
     """Read a workflow JSON file and detect its format.
 
     Returns {path, format: "api"|"ui"|"unknown", node_count, workflow}.
     - "api" is the flat {<id>: {class_type, inputs}} shape that queue_workflow accepts.
     - "ui" is the editor's saved shape (top-level "nodes"/"links"); not directly runnable —
-      open in ComfyUI and "Save (API Format)" to convert.
+      open in ComfyUI and "Save (API Format)" to convert, or try draft_api_workflow() for
+      a best-effort headless conversion.
+
+    A relative path first tries relative to <COMFYUI_ROOT>/user/default/workflows (same
+    resolution catalog_workflows/describe_workflow use) before falling back to relative-
+    to-cwd — so a path copied straight out of catalog_workflows' rel_path field just works.
     """
-    p = Path(path).expanduser().resolve()
+    p = Path(path).expanduser()
+    if not p.is_absolute():
+        try:
+            cand = _comfy_root() / "user" / "default" / "workflows" / path
+            if cand.exists():
+                p = cand
+        except RuntimeError:
+            pass
+    p = p.resolve()
     if not p.is_file():
         return {"path": str(p), "error": "not a file"}
     try:
@@ -2789,7 +3295,103 @@ def read_workflow(path: str) -> dict[str, Any]:
     return {"path": str(p), "format": fmt, "node_count": count, "workflow": wf}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
+async def read_image_workflow(
+    filename: str,
+    subfolder: str = "",
+    type: str = "output",
+    include_ui: bool = False,
+) -> dict[str, Any]:
+    """Extract the workflow ComfyUI embedded in a generated image — the headless
+    equivalent of dragging an old output back into the editor.
+
+    ComfyUI stamps every output it saves with the graph that made it: `prompt` (API
+    format, already runnable) and usually `workflow` (UI format). Use this to answer
+    "what settings produced this image?", to regenerate/vary an old result, or to mine
+    your own output history for a known-good graph — then feed the returned `prompt`
+    straight to run_workflow(workflow=...) with overrides for the seed/prompt you want.
+
+    `filename` is resolved the same way view_file does: a ComfyUI output/input/temp name
+    (fetched over HTTP), or an absolute local path to a file on disk. Works on PNG (text
+    chunks) and WebP/JPEG (EXIF); a file re-saved by an external editor may have had its
+    metadata stripped, in which case `found` is empty.
+
+    Returns {filename, found: ["prompt", "workflow"?], prompt: <API graph>,
+    workflow?: <UI graph, only when include_ui=True>, node_count?}. The UI graph is
+    token-heavy and usually not needed, so it's omitted unless include_ui is set.
+    """
+    p = Path(filename).expanduser()
+    if p.is_absolute() and p.is_file():
+        data = p.read_bytes()
+    else:
+        try:
+            data, _ = await comfy.view(filename, subfolder=subfolder, folder_type=type)
+        except Exception as e:
+            return {"filename": filename, "error": f"could not read image: {e}"}
+
+    extracted = _extract_embedded_workflow(data)
+    if extracted.get("error"):
+        return {"filename": filename, **extracted}
+
+    out: dict[str, Any] = {"filename": filename, "found": extracted.get("found", [])}
+    if "prompt" in extracted:
+        out["prompt"] = extracted["prompt"]
+        out["node_count"] = len(extracted["prompt"]) if isinstance(extracted["prompt"], dict) else None
+    if include_ui and "workflow" in extracted:
+        out["workflow"] = extracted["workflow"]
+    if not out["found"]:
+        out["note"] = "no embedded workflow metadata found (image may have been re-saved externally)"
+    return out
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def draft_api_workflow(
+    workflow: dict[str, Any] | None = None,
+    path: str = "",
+) -> dict[str, Any]:
+    """Best-effort draft of an API-format graph from a UI-format workflow.
+
+    Handles the common, mechanical case: you have a saved UI-format workflow you want to
+    run headlessly (batch_run/run_workflow's `path=`) instead of opening it in a tab, and
+    hand-transcribing node-by-node is slow and error-prone. This resolves:
+      • widget values (positional widgets_values -> named inputs, via the same
+        length-matching alignment get_node_widgets/describe_graph use)
+      • direct node-to-node links
+      • Reroute chains, PrimitiveNode literals, and rgthree's GetNode/SetNode indirection
+        (all pure UI organization with no API-format equivalent — consumers get rewired
+        straight through to the real source)
+      • subgraph instances — flattened into plain nodes with '<instance>:<inner>' ids (the
+        same namespacing ComfyUI's own frontend uses), recursing through nested subgraphs.
+        Exposed-widget overrides on a subgraph instance are NOT applied (inner nodes keep
+        their own values); that case is flagged in `warnings`.
+
+    Still not a byte-exact replica of ComfyUI's browser converter — treat it as a strong
+    draft, not ground truth. Anything it can't confidently resolve (a dangling link, a
+    GetNode with no matching
+    SetNode, a widget/value count mismatch) is surfaced in `warnings` rather than silently
+    producing a broken graph — read those before trusting the output. Always run
+    validate_workflow_models on the result before queuing; it also catches inputs this
+    tool had no way to fill in (nothing connects them, and they weren't in widgets_values
+    either — happens when a UI workflow relies on a default the frontend injects silently).
+
+    Args:
+        workflow: UI-format workflow dict (e.g. from read_workflow). Omit if using `path`.
+        path: load a UI-format .json file instead (same resolution as read_workflow).
+
+    Returns: {ok, workflow: <API-format dict>, node_count, warnings: [...],
+              excluded_nodes: [...]} or {ok: false, error, subgraph_node_ids?} if refused.
+    """
+    if workflow is None:
+        if not path:
+            return {"ok": False, "error": "pass either workflow= or path="}
+        read = read_workflow(path)
+        if "error" in read:
+            return {"ok": False, "error": read["error"], "path": read.get("path")}
+        workflow = read["workflow"]
+    return await _draft_api_workflow(workflow)
+
+
+@mcp.tool(annotations=_READ_ONLY)
 def list_failed_imports(path: str = "", with_tracebacks: bool = True) -> dict[str, Any]:
     """Surface custom_node packages that failed to import during ComfyUI startup.
 
@@ -2908,7 +3510,7 @@ def list_failed_imports(path: str = "", with_tracebacks: bool = True) -> dict[st
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def list_custom_nodes() -> dict[str, Any]:
     """List custom_node packages installed under <COMFYUI_ROOT>/custom_nodes.
 
@@ -3005,7 +3607,7 @@ async def _edit_ui(workflow: dict[str, Any], edits: dict[str, dict[str, Any]]) -
     return {"workflow": wf, "format": "ui", "applied": applied, "errors": errors}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def suggest_local_loras(
     intent: str,
     base_model: str = "",
@@ -3038,7 +3640,7 @@ async def suggest_local_loras(
     return _loras_mod.suggest(intent=intent, base_model=base_model or None, k=k)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def search_civitai(
     query: str,
     types: str = "LORA",
@@ -3096,7 +3698,7 @@ async def search_civitai(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def describe_civitai_model(model_id: int) -> dict[str, Any]:
     """Fetch full detail for a Civitai model by ID. Use after search_civitai when
     the user picks one and you need version list / declared trigger words /
@@ -3115,7 +3717,7 @@ async def describe_civitai_model(model_id: int) -> dict[str, Any]:
     return await _civitai.describe(model_id=model_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 async def download_civitai_model(
     model_id: int,
     version_id: int = 0,

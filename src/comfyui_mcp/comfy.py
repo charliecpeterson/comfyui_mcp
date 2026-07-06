@@ -16,6 +16,22 @@ DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 DEFAULT_TIMEOUT = float(os.environ.get("COMFYUI_TIMEOUT", "30"))
 
 
+def _extract_execution_error(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Pull the execution_error payload out of a /history entry's status.messages.
+
+    History entries store terminal events as [event_type, payload] pairs under
+    status.messages. When status_str is "error" the payload we want is the
+    "execution_error" one — same shape (node_id/exception_type/exception_message/
+    traceback/current_inputs/current_outputs) as the live WS execution_error event,
+    so callers get a consistent `error` field regardless of which path caught it.
+    """
+    messages = (entry.get("status") or {}).get("messages") or []
+    for msg in messages:
+        if isinstance(msg, (list, tuple)) and len(msg) == 2 and msg[0] == "execution_error":
+            return msg[1] if isinstance(msg[1], dict) else None
+    return None
+
+
 class ComfyClient:
     def __init__(self, base_url: str = DEFAULT_URL, timeout: float = DEFAULT_TIMEOUT):
         self.base_url = base_url.rstrip("/")
@@ -43,6 +59,7 @@ class ComfyClient:
         client_id: str | None = None,
         prompt_id: str | None = None,
         extra_data: dict[str, Any] | None = None,
+        partial_execution_targets: list[str] | None = None,
     ) -> tuple[int, dict[str, Any]]:
         payload: dict[str, Any] = {"prompt": workflow}
         if client_id:
@@ -51,9 +68,51 @@ class ComfyClient:
             payload["prompt_id"] = prompt_id
         if extra_data:
             payload["extra_data"] = extra_data
+        # Top-level key on /prompt (sibling of prompt/client_id), consumed by
+        # execution.validate_prompt to restrict the run to these output nodes.
+        if partial_execution_targets:
+            payload["partial_execution_targets"] = partial_execution_targets
         async with self._client() as c:
             r = await c.post("/prompt", json=payload)
             return r.status_code, r.json()
+
+    async def free(self, unload_models: bool = False, free_memory: bool = False) -> dict[str, Any]:
+        """POST /free — request ComfyUI drop cached models / free VRAM. The server sets a
+        queue flag consumed on the next worker cycle; it returns 200 with an empty body
+        immediately, so this doesn't block on the actual unload."""
+        async with self._client() as c:
+            r = await c.post("/free", json={"unload_models": unload_models, "free_memory": free_memory})
+            return {"ok": r.status_code == 200, "status": r.status_code}
+
+    async def workflow_templates(self) -> dict[str, Any]:
+        """GET /api/workflow_templates — {package_name: [template_name, ...]} for
+        templates shipped by installed custom_node packages."""
+        async with self._client() as c:
+            r = await c.get("/api/workflow_templates")
+            r.raise_for_status()
+            return r.json()
+
+    async def workflow_template(self, package: str, name: str) -> dict[str, Any]:
+        """GET one custom_node template's UI-format JSON."""
+        async with self._client() as c:
+            r = await c.get(f"/api/workflow_templates/{package}/{name}.json")
+            r.raise_for_status()
+            return r.json()
+
+    async def core_templates(self) -> list[dict[str, Any]]:
+        """GET /templates/index.json — the core Comfy-Org template catalog, a list of
+        categories each with a `templates` array of {name, title, description, models, ...}."""
+        async with self._client() as c:
+            r = await c.get("/templates/index.json")
+            r.raise_for_status()
+            return r.json()
+
+    async def core_template(self, name: str) -> dict[str, Any]:
+        """GET one core template's UI-format JSON by its `name`."""
+        async with self._client() as c:
+            r = await c.get(f"/templates/{name}.json")
+            r.raise_for_status()
+            return r.json()
 
     async def history(
         self, prompt_id: str | None = None, max_items: int | None = None
@@ -120,6 +179,19 @@ class ComfyClient:
             r = await c.post("/upload/image", files=files, data=data)
             r.raise_for_status()
             return r.json()
+
+    async def manager_node_mappings(self) -> dict[str, Any] | None:
+        """GET ComfyUI-Manager's node→package map: {install_id_or_url: [[class_names...],
+        {title_aux, ...}]}. Returns None if Manager isn't installed (404) or errors —
+        callers degrade to "can't identify the provider" rather than failing."""
+        try:
+            async with self._client() as c:
+                r = await c.get("/customnode/getmappings", params={"mode": "local"})
+                if r.status_code != 200:
+                    return None
+                return r.json()
+        except httpx.HTTPError:
+            return None
 
     async def bridge_debug(self) -> dict[str, Any]:
         async with self._client() as c:
@@ -233,7 +305,12 @@ class ComfyClient:
             pass
         return events
 
-    async def wait(self, prompt_id: str, timeout: float = 300.0) -> dict[str, Any]:
+    async def wait(
+        self,
+        prompt_id: str,
+        timeout: float = 300.0,
+        on_progress=None,
+    ) -> dict[str, Any]:
         """Wait for a prompt to finish. Two parallel paths:
 
         1. WebSocket events — fast wake-up when ComfyUI fires execution_success, IF the
@@ -246,6 +323,13 @@ class ComfyClient:
            WS activity. This is the source of truth: when /history has the prompt_id, the
            run is complete. Without this, jobs that finish via cached/scoped WS events
            hang the wait until timeout.
+
+        A history entry exists whether the run succeeded OR failed — /history doesn't
+        distinguish at the polling level, so we have to inspect entry.status.status_str
+        ourselves. Without that, a run that fails and is only observed via the history-poll
+        path (the common case: the live WS execution_error event is scoped to the browser's
+        client_id, same reason as above) gets reported as status="completed" with the actual
+        failure buried three levels deep in history.status.messages instead of surfaced.
         """
         HISTORY_POLL_INTERVAL = 2.0
 
@@ -258,9 +342,19 @@ class ComfyClient:
                 pass
             return None
 
+        def result_for(entry: dict[str, Any], progress: dict[str, Any] | None) -> dict[str, Any]:
+            status_str = (entry.get("status") or {}).get("status_str")
+            if status_str == "error":
+                out: dict[str, Any] = {"status": "error", "history": entry, "progress": progress}
+                err = _extract_execution_error(entry)
+                if err is not None:
+                    out["error"] = err
+                return out
+            return {"status": "completed", "history": entry, "progress": progress}
+
         # Initial check (already done?)
         if (entry := await check_history()) is not None:
-            return {"status": "completed", "history": entry, "progress": None}
+            return result_for(entry, None)
 
         deadline = time.monotonic() + timeout
         last_progress: dict[str, Any] | None = None
@@ -280,7 +374,7 @@ class ComfyClient:
                     if now - last_history_check >= HISTORY_POLL_INTERVAL:
                         last_history_check = now
                         if (entry := await check_history()) is not None:
-                            return {"status": "completed", "history": entry, "progress": last_progress}
+                            return result_for(entry, last_progress)
 
                     ws_timeout = min(remaining, HISTORY_POLL_INTERVAL)
                     try:
@@ -305,13 +399,18 @@ class ComfyClient:
                             "max": payload.get("max"),
                             "node": payload.get("node"),
                         }
+                        if on_progress is not None:
+                            try:
+                                await on_progress(last_progress)
+                            except Exception:
+                                pass  # a broken progress sink must never abort the wait
                         continue
                     if msg_pid and msg_pid != prompt_id:
                         continue
 
                     if t == "execution_success":
                         if (entry := await check_history()) is not None:
-                            return {"status": "completed", "history": entry, "progress": last_progress}
+                            return result_for(entry, last_progress)
                     if t == "execution_error":
                         return {"status": "error", "error": payload, "progress": last_progress}
                     if t == "execution_interrupted":
@@ -319,12 +418,12 @@ class ComfyClient:
                     if t == "executing" and payload.get("node") is None and msg_pid == prompt_id:
                         # legacy terminal signal on older ComfyUI
                         if (entry := await check_history()) is not None:
-                            return {"status": "completed", "history": entry, "progress": last_progress}
+                            return result_for(entry, last_progress)
         except (websockets.WebSocketException, OSError):
             # WS connection failed — fall through to history-only polling
             while time.monotonic() < deadline:
                 await asyncio.sleep(HISTORY_POLL_INTERVAL)
                 if (entry := await check_history()) is not None:
-                    return {"status": "completed", "history": entry, "progress": last_progress}
+                    return result_for(entry, last_progress)
 
         return {"status": "timeout", "progress": last_progress}

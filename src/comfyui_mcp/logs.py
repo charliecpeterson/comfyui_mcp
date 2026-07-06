@@ -24,6 +24,30 @@ def _is_log_noise(line: str) -> bool:
     return any(p.match(line) for p in _NOISE_PATTERNS)
 
 
+# Phrases a node raises when a required custom_node package or Python dependency isn't
+# installed. Node authors phrase these inconsistently ("you need to install X", a bare
+# ModuleNotFoundError, an import name mismatch after a package upgrade) so this is a
+# handful of patterns, not one regex.
+_MISSING_DEPENDENCY_PATTERNS = [
+    re.compile(r"you need to install", re.IGNORECASE),
+    re.compile(r"no module named", re.IGNORECASE),
+    re.compile(r"modulenotfounderror", re.IGNORECASE),
+    re.compile(r"cannot import name", re.IGNORECASE),
+    re.compile(r"is not installed", re.IGNORECASE),
+]
+
+
+def _looks_like_missing_dependency(message: str) -> bool:
+    """True if an exception message reads like a missing custom_node package or Python
+    dependency rather than a bad input/argument. Used to hint agents toward
+    `list_failed_imports` instead of re-running the same workflow expecting a different
+    result — a node execution error and a startup import failure are the same root cause
+    surfacing at two different times."""
+    if not isinstance(message, str):
+        return False
+    return any(p.search(message) for p in _MISSING_DEPENDENCY_PATTERNS)
+
+
 def _strip_history_warnings(history: dict[str, Any]) -> dict[str, Any]:
     """Drop noise lines from history.status.messages. ComfyUI structures these as
     [event_type, payload_dict] pairs; messages of type 'logs' or with a nested 'entries'

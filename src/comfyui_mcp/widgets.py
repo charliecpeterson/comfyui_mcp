@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .client import comfy
+from .core import _combo_options
 
 
 _WIDGET_TYPES = {"STRING", "INT", "FLOAT", "BOOLEAN"}
@@ -32,9 +33,9 @@ async def _ui_widget_order(class_type: str) -> list[str]:
             opts = decl[1] if isinstance(decl, (list, tuple)) and len(decl) > 1 else {}
             opts = opts if isinstance(opts, dict) else {}
             is_widget = False
-            if isinstance(t, list):
+            if _combo_options(decl) is not None:
                 if not opts.get("forceInput"):
-                    order.append(name)  # COMBO[...]
+                    order.append(name)  # COMBO[...] — either schema shape
                     is_widget = True
             elif isinstance(t, str) and t in _WIDGET_TYPES:
                 if not opts.get("forceInput"):
@@ -79,8 +80,8 @@ def _flatten_inputs(spec: dict[str, Any]) -> list[tuple[str, Any]]:
 
 
 def _socket_type(t: Any) -> str:
+    if isinstance(t, list) or t == "COMBO":
+        return "ENUM"  # normalize both combo schema shapes to the same label
     if isinstance(t, str):
         return t.upper()
-    if isinstance(t, list):
-        return "ENUM"
     return str(t).upper()

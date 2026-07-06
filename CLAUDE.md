@@ -9,7 +9,7 @@ A stdio MCP server (`comfyui-mcp` console script) that lets an agent inspect, ed
 - **API-only** — talks to ComfyUI over HTTP/WS (`/prompt`, `/history`, `/object_info`, `/queue`, etc.).
 - **Live co-edit** — also talks to the bundled `comfyui-mcp-bridge` custom_node, which serves per-tab graph state from the actual browser editor over HTTP long-poll.
 
-The README at the repo root is the authoritative user-facing reference for the tool surface (58 tools) and bridge protocol. Read it before adding/changing tools.
+The README at the repo root is the authoritative user-facing reference for the tool surface (66 tools) and bridge protocol. Read it before adding/changing tools.
 
 ## Install / run
 
@@ -18,7 +18,7 @@ uv pip install -e .              # or: pip install -e .
 comfyui-mcp                      # stdio entry point (see pyproject.toml [project.scripts])
 ```
 
-There are **no tests, no linter config, no build step**. Iteration loop is: edit → restart the MCP client (Claude Code) → invoke the tool → observe.
+Offline unit tests for the pure helpers live in `tests/` (pytest, `pip install -e ".[dev]"` then `pytest tests/ -q`) — they need no running ComfyUI and cover format detection, the COMBO dual-shape sniff, subgraph path addressing, UI→API subgraph flattening, and PNG metadata extraction. There's **no linter config and no build step**. Anything that needs a live server (queueing, the bridge, `/object_info` widget alignment) is still verified by hand: edit → restart the MCP client → invoke the tool → observe.
 
 When wiring into Claude Code, point at the venv's `comfyui-mcp` binary directly. **Never use `uv run`** — it prints to stdout and corrupts the JSON-RPC stream. (This bites every new contributor; preserve it in any install docs you touch.)
 
@@ -26,13 +26,13 @@ When wiring into Claude Code, point at the venv's `comfyui-mcp` binary directly.
 
 ### Module layout (`src/comfyui_mcp/`)
 
-`server.py` is the only file with `@mcp.tool()` decorators (~2900 lines, all 58 tools). Pure helpers were extracted into focused modules to keep server.py navigable:
+`server.py` is the only file with `@mcp.tool()` decorators (~3000 lines, all 66 tools). Pure helpers were extracted into focused modules to keep server.py navigable:
 
 - `client.py` — shared singleton `ComfyClient` (avoids server.py ↔ helpers import cycle). All helpers import `from .client import comfy`.
 - `comfy.py` — thin httpx/websockets wrapper over the ComfyUI REST + WS surface.
 - `core.py` — `_comfy_root()`, `_detect_format()`, `_resolve_node_path()`, `_subgraph_def()`, `_outputs_to_files()`. The shared vocabulary every other module uses.
 - `tabs.py` — `_workflow_from_tab()` and `_queue_and_enrich()`: the canonical "pull workflow from the open browser tab via the bridge, queue it, shape the response" path. Used by every tool whose default behavior is "operate on the open tab."
-- `widgets.py`, `summarize.py`, `snapshots.py`, `search.py`, `model_meta.py`, `images.py`, `logs.py` — domain helpers. The names match their imports in `server.py`.
+- `widgets.py`, `summarize.py`, `snapshots.py`, `search.py`, `model_meta.py`, `images.py`, `logs.py`, `convert.py` — domain helpers. The names match their imports in `server.py`.
 
 When adding a new tool that operates on the open tab, reuse `_workflow_from_tab` + `_queue_and_enrich` — don't reimplement the state-fetch + error-shape contract.
 
@@ -43,7 +43,7 @@ ComfyUI has **two** JSON shapes; tools must handle both or document which they a
 - **UI format** — what the editor reads/writes: top-level `{nodes: [...], links: [...], definitions: {subgraphs: [...]}}`. Includes layout, subgraph definitions, widget order.
 - **API format** — what `/prompt` accepts: `{node_id: {class_type, inputs: {...}}, ...}`. No layout, no subgraphs.
 
-`_detect_format()` in `core.py` is the canonical sniff. **The MCP does NOT convert UI → API** — that conversion lives in ComfyUI's browser JS. When the user has a UI-format file, route them through `run_workflow()` (the bridge already holds the API form) or ask them to "Save (API Format)".
+`_detect_format()` in `core.py` is the canonical sniff. **The MCP does not do a full UI → API conversion** (subgraph flattening, exact frontend semantics) — that lives in ComfyUI's browser JS. When the user has a UI-format file, route them through `run_workflow()` (the bridge already holds the API form) or ask them to "Save (API Format)". For the narrower, common case — a saved UI-format template you want to run headlessly — `draft_api_workflow()` (`convert.py`) resolves widgets/links/Reroute/PrimitiveNode/GetNode-SetNode indirection, flattens subgraph instances (`_expand_subgraphs` inlines them with `<instance>:<inner>` ids, recursing through nesting), and surfaces anything it can't confidently resolve as a warning. It's a strong draft, not a byte-exact replica of the frontend converter, so always follow it with `validate_workflow_models` before queuing.
 
 ### Subgraph addressing
 
@@ -96,7 +96,7 @@ Two skill families:
 
 ## Caveats list (from README — re-read when in doubt)
 
-- No UI → API converter
+- UI → API conversion is best-effort (`draft_api_workflow`, subgraph-flattening included), not a byte-exact replica of the frontend — validate before queuing
 - Live ops are top-level only (use offline edit + `apply_workflow` for subgraphs)
 - Browser-driven cancels aren't pushed to the MCP in real time
 - `arrange_layout` depends on `LGraph.arrange()` existing in the user's ComfyUI build

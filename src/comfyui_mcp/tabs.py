@@ -33,11 +33,15 @@ async def _workflow_from_tab(
 
 
 async def _queue_and_enrich(
-    workflow: dict[str, Any], client_id: str | None = None
+    workflow: dict[str, Any],
+    client_id: str | None = None,
+    partial_execution_targets: list[str] | None = None,
 ) -> dict[str, Any]:
     """Submit a workflow and shape the response uniformly: {ok, prompt_id?, error?, node_errors?}.
     On validation failure, node_errors are enriched with valid_values from /object_info."""
-    status, body = await comfy.queue(workflow, client_id=client_id)
+    status, body = await comfy.queue(
+        workflow, client_id=client_id, partial_execution_targets=partial_execution_targets
+    )
     if status == 200:
         return {"ok": True, **body}
     if "node_errors" in body:

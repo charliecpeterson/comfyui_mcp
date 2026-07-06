@@ -10,6 +10,7 @@ from .core import (
     _NOTE_NODE_TYPES,
     _MODEL_FILE_EXTS,
     _all_nodes,
+    _combo_options,
     _comfy_root,
     _detect_format,
     _subgraph_def,
@@ -88,6 +89,25 @@ def _extract_model_widget_refs(workflow: dict[str, Any], fmt: str) -> list[dict[
     return out
 
 
+def _required_inputs_with_defaults(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Every required-input name for a node class, per /object_info, with its declared
+    type and default (when the schema provides one). Used to catch the "workflow saved
+    against an older node version that lacked a since-added required input" class of
+    bug — e.g. ImageScaleToTotalPixels gaining a required `resolution_steps` param — which
+    only otherwise surfaces as a rejected /prompt after a full queue round-trip."""
+    out: dict[str, dict[str, Any]] = {}
+    inputs = spec.get("input", {}) if isinstance(spec, dict) else {}
+    for name, decl in (inputs.get("required") or {}).items():
+        t = decl[0] if isinstance(decl, (list, tuple)) and decl else decl
+        opts = decl[1] if isinstance(decl, (list, tuple)) and len(decl) > 1 else {}
+        opts = opts if isinstance(opts, dict) else {}
+        out[name] = {
+            "type": "ENUM" if _combo_options(decl) is not None else t,
+            "default": opts.get("default"),
+        }
+    return out
+
+
 def _valid_values_for_input(spec: dict[str, Any], input_name: str | None) -> Any:
     """Pull the valid_values list (the combo list) for a named input from /object_info.
     Returns the list, or None if not a combo. With input_name=None (UI-format fallback
@@ -97,14 +117,11 @@ def _valid_values_for_input(spec: dict[str, Any], input_name: str | None) -> Any
     for section in ("required", "optional"):
         decls = (inputs.get(section) or {})
         if input_name and input_name in decls:
-            decl = decls[input_name]
-            t = decl[0] if isinstance(decl, (list, tuple)) and decl else None
-            return t if isinstance(t, list) else None
+            return _combo_options(decls[input_name])
         if input_name is None:
             for _name, decl in decls.items():
-                t = decl[0] if isinstance(decl, (list, tuple)) and decl else None
-                if isinstance(t, list) and t and isinstance(t[0], str) \
-                        and t[0].lower().endswith(_MODEL_FILE_EXTS):
+                t = _combo_options(decl)
+                if t and isinstance(t[0], str) and t[0].lower().endswith(_MODEL_FILE_EXTS):
                     return t
     return None
 
